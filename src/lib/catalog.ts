@@ -5,6 +5,7 @@ import type {
   Category,
   Part,
   PartByCategory,
+  PriceBlock,
   ResolvedBuild,
 } from './types'
 
@@ -69,9 +70,30 @@ export async function loadCatalog(baseUrl = `${import.meta.env.BASE_URL}data/`):
     if (!r.ok) throw new Error(`${name}.json: HTTP ${r.status}`)
     return r.json()
   }
-  const [meta, ...lists] = await Promise.all([get('meta'), ...CATEGORIES.map((c) => get(c.id))])
+  const [meta, prices, ...lists] = await Promise.all([
+    get('meta'),
+    // prices are optional: the site works (without prices) if the file is missing
+    get('prices').catch(() => ({})),
+    ...CATEGORIES.map((c) => get(c.id)),
+  ])
   const data = Object.fromEntries(CATEGORIES.map((c, i) => [c.id, lists[i]])) as CatalogData
+  attachPrices(data, prices)
   return { catalog: createCatalog(data), meta }
+}
+
+/** Copies the price blocks onto the parts (the price file is kept separate so the nightly job only touches it). */
+export function attachPrices(data: CatalogData, prices: Record<string, PriceBlock>): void {
+  for (const list of Object.values(data) as Part[][])
+    for (const p of list) {
+      const price = prices[p.id]
+      if (price) p.price = price
+    }
+}
+
+export const SOURCE_LABELS: Record<string, string> = {
+  manual: 'kézi',
+  arukereso: 'Árukereső',
+  argep: 'Árgép',
 }
 
 /** Egy kategória egy elemének hozzáadása / cseréje a választáshoz. */

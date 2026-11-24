@@ -23,6 +23,25 @@ npm run build   # static build into dist/
 - `src/test/fixtures/` – small hand-written part list for tests
 - `.github/workflows/deploy.yml` – test, build and deploy to GitHub Pages on every push to `main`
 
+## Prices
+
+`scripts/prices/update-prices.mjs` runs every night (`.github/workflows/update-prices.yml`):
+
+1. each source in `SOURCES` returns shop offers (currently only `manual`: `data/offers/manual.csv`);
+2. offers are matched to parts by EAN or manufacturer part number (`data/part-identifiers.json`,
+   written by the OpenDB importer); identifiers shared by several parts are ignored;
+3. per part: median price, lowest price, number of distinct shops → `public/data/prices.json`;
+4. a part without fresh offers keeps its last price for up to 14 days; a median change over 40% is flagged;
+5. changed prices are appended to `data/price-history/YYYY-MM.csv`.
+
+A failing source doesn't stop the others, but the workflow fails so GitHub sends an e-mail.
+To add a source, create `scripts/prices/sources/<name>.mjs` exporting `name` and
+`fetchOffers()` (see `manual.mjs`), then add it to `SOURCES`.
+
+```
+node scripts/prices/update-prices.mjs   # run locally
+```
+
 ## Data and license
 
 Part specifications come from [BuildCores OpenDB](https://github.com/buildcores/buildcores-open-db),

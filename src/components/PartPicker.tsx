@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import type { Catalog, CategoryInfo } from '../lib/catalog'
-import { candidateErrors, formatHuf } from '../lib/builder'
+import { candidateErrors } from '../lib/builder'
+import { PriceInfo } from './PriceInfo'
 import { fullName, specLine } from '../lib/specs'
 import type { BuildSelection, Part } from '../lib/types'
 
@@ -126,17 +127,8 @@ export function PartPicker({ catalog, category, selection, onPick, onClose }: Pr
                   <div className="mt-1 text-sm text-red-700">⛔ {errors.map((e) => e.message).join(' ')}</div>
                 )}
               </div>
-              <div className="shrink-0 text-right">
-                {part.price ? (
-                  <>
-                    <div className="font-semibold tabular-nums">{formatHuf(part.price.medianHuf)}</div>
-                    <div className="text-xs text-slate-500">
-                      {part.price.offerCount} ajánlat · min. {formatHuf(part.price.minHuf)}
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-sm text-slate-400">nincs ár</div>
-                )}
+              <div className="shrink-0">
+                <PriceInfo price={part.price} compact />
               </div>
               <button
                 onClick={() => onPick(part)}

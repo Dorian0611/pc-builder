@@ -1,0 +1,3 @@
+# Kézi árak. Oszlopok: shop,priceHuf,mpn,ean,partId,url
+# Legalább az mpn, ean vagy partId egyike kell. Az ár egész forint, szóköz nélkül.
+shop,priceHuf,mpn,ean,partId,url

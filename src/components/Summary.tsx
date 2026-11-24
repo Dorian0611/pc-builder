@@ -34,7 +34,10 @@ export function Summary({ build, checks }: Props) {
         <div className="text-sm text-slate-500">Becsült végösszeg</div>
         <div className="text-3xl font-semibold tabular-nums">{priced > 0 ? formatHuf(totalHuf) : '–'}</div>
         {missingPrice > 0 && priced > 0 && <div className="mt-1 text-sm text-slate-500">{missingPrice} alkatrésznek nincs ára</div>}
-        {priced === 0 && <div className="mt-1 text-sm text-slate-500">Árak a következő fázisban.</div>}
+        {priced === 0 && <div className="mt-1 text-sm text-slate-500">A kiválasztott alkatrészeknek még nincs ára.</div>}
+        {priced > 0 && (
+          <div className="mt-1 text-xs text-slate-500">Bolti ajánlatok mediánja (középső ára) alapján.</div>
+        )}
         <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <dt className="text-slate-500">Becsült csúcsfogyasztás</dt>
           <dd className="text-right tabular-nums">{power.uncertain ? '~' : ''}{power.peakW} W</dd>

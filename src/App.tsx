@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CATEGORIES, loadCatalog, withPart, withoutPart, type Catalog, type CategoryInfo } from './lib/catalog'
 import { checkBuild } from './lib/compat'
-import { formatHuf } from './lib/builder'
 import { fullName, specLine } from './lib/specs'
 import type { BuildSelection, CatalogMeta, CheckLevel } from './lib/types'
 import { PartPicker } from './components/PartPicker'
 import { Summary } from './components/Summary'
 import { Footer } from './components/Footer'
+import { PriceInfo } from './components/PriceInfo'
 
 const STORAGE_KEY = 'pc-builder:current'
 
@@ -68,6 +68,10 @@ function Builder({ catalog, meta }: { catalog: Catalog; meta: CatalogMeta }) {
 
   const hasAny = Object.values(selection).some((v) => v && v.length > 0)
   const total = Object.values(meta.counts).reduce((s, n) => s + (n ?? 0), 0)
+  const hasPrices = useMemo(
+    () => Object.values(catalog.data).some((list) => (list as { price?: unknown }[]).some((p) => p.price)),
+    [catalog],
+  )
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -88,9 +92,11 @@ function Builder({ catalog, meta }: { catalog: Catalog; meta: CatalogMeta }) {
         )}
       </header>
 
-      <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
-        Fejlesztői változat: árak még nincsenek, az árfrissítés a következő fázisban készül.
-      </div>
+      {!hasPrices && (
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          Fejlesztői változat: az árak gyűjtése még nem indult el, ezért egyelőre nincsenek árak.
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <main className="min-w-0 divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
@@ -124,8 +130,8 @@ function Builder({ catalog, meta }: { catalog: Catalog; meta: CatalogMeta }) {
                         <div className="truncate font-medium" title={fullName(p)}>{fullName(p)}</div>
                         <div className="truncate text-sm text-slate-500">{specLine(p)}</div>
                       </div>
-                      <div className="text-right text-sm tabular-nums text-slate-500">
-                        {p.price ? formatHuf(p.price.medianHuf) : '–'}
+                      <div className="shrink-0">
+                        <PriceInfo price={p.price} />
                       </div>
                       {!cat.multi && (
                         <button onClick={() => setPicking(cat)} className="text-sm text-blue-700 hover:underline">

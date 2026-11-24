@@ -248,6 +248,26 @@ try {
   commit = 'ismeretlen'
 }
 
+/**
+ * Gyártói cikkszámok és vonalkódok az árak párosításához. Ezt a böngésző nem
+ * kapja meg (data/, nem public/data/), csak az árfrissítő használja.
+ */
+function extractIdentifiers(j) {
+  const mpn = new Set()
+  const ean = new Set()
+  for (const raw of j.metadata?.part_numbers ?? [])
+    for (const pn of String(raw).split(/\s{2,}/)) if (pn.trim()) mpn.add(pn.trim())
+  for (const id of j.identifiers?.identifiers ?? []) {
+    const v = String(id.value ?? '').trim()
+    if (!v) continue
+    if (id.type === 'mpn') mpn.add(v)
+    // UPC-A (12 jegy) → EAN-13 egy vezető nullával; a boltok jellemzően EAN-t adnak
+    else if (['ean', 'gtin', 'upc'].includes(id.type)) ean.add(v.replace(/\D/g, '').padStart(13, '0').slice(-13))
+  }
+  return clean({ mpn: mpn.size ? [...mpn] : undefined, ean: ean.size ? [...ean] : undefined })
+}
+
+const identifiers = {}
 const counts = {}
 for (const [cat, dir] of Object.entries(SOURCE_DIRS)) {
   const files = fs.readdirSync(path.join(dbDir, dir)).filter((f) => f.endsWith('.json'))
@@ -267,6 +287,7 @@ for (const [cat, dir] of Object.entries(SOURCE_DIRS)) {
       continue
     }
     out.push(clean(part))
+    identifiers[part.id] = extractIdentifiers(j)
   }
   out.sort((a, b) => `${a.brand} ${a.name}`.localeCompare(`${b.brand} ${b.name}`))
   fs.writeFileSync(path.join(outDir, `${cat}.json`), JSON.stringify(out))
@@ -284,4 +305,11 @@ const meta = {
   counts,
 }
 fs.writeFileSync(path.join(outDir, 'meta.json'), JSON.stringify(meta, null, 2))
+
+const privateDir = path.resolve('data')
+fs.mkdirSync(privateDir, { recursive: true })
+fs.writeFileSync(path.join(privateDir, 'part-identifiers.json'), JSON.stringify(identifiers))
+const withEan = Object.values(identifiers).filter((x) => x.ean).length
+const withMpn = Object.values(identifiers).filter((x) => x.mpn).length
+console.log(`azonosítók: ${withMpn} cikkszámmal, ${withEan} EAN-nal`)
 console.log(`\nForrás: ${commit}`)

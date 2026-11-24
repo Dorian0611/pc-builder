@@ -1,0 +1,53 @@
+name: Update prices
+
+on:
+  schedule:
+    - cron: '30 1 * * *' # every night, 01:30 UTC (02:30 / 03:30 Budapest)
+  workflow_dispatch:
+
+permissions:
+  contents: write # commit the new prices
+  actions: write  # trigger the deploy workflow
+
+concurrency:
+  group: update-prices
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # A failing source fails this step → GitHub e-mails the repo owner.
+      # `if: always()` below still commits whatever the other sources delivered.
+      - name: Collect prices
+        id: collect
+        run: node scripts/prices/update-prices.mjs
+
+      - name: Commit changes
+        id: commit
+        if: always() && steps.collect.outcome != 'cancelled'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data/prices.json data
+          if git diff --cached --quiet; then
+            echo "No price changes."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Update prices $(date -u +%F)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Pushes made with GITHUB_TOKEN don't trigger other workflows, so start the deploy explicitly.
+      - name: Deploy
+        if: always() && steps.commit.outputs.changed == 'true'
+        run: gh workflow run deploy.yml --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}
