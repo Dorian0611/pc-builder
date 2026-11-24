@@ -20,6 +20,7 @@ export function PartPicker({ catalog, category, selection, onPick, onClose }: Pr
   const [query, setQuery] = useState('')
   const [brand, setBrand] = useState('')
   const [onlyCompatible, setOnlyCompatible] = useState(true)
+  const [onlyPriced, setOnlyPriced] = useState(false)
   const [sort, setSort] = useState<Sort>('newest')
   const [limit, setLimit] = useState(PAGE)
   const deferredQuery = useDeferredValue(query)
@@ -30,7 +31,7 @@ export function PartPicker({ catalog, category, selection, onPick, onClose }: Pr
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  useEffect(() => setLimit(PAGE), [deferredQuery, brand, onlyCompatible, sort])
+  useEffect(() => setLimit(PAGE), [deferredQuery, brand, onlyCompatible, onlyPriced, sort])
 
   const parts: Part[] = catalog.data[category.id]
   const brands = useMemo(() => [...new Set(parts.map((p) => p.brand))].sort((a, b) => a.localeCompare(b, 'hu')), [parts])
@@ -46,6 +47,7 @@ export function PartPicker({ catalog, category, selection, onPick, onClose }: Pr
     const list = withErrors
       .filter(({ part }) => !brand || part.brand === brand)
       .filter(({ errors }) => !onlyCompatible || errors.length === 0)
+      .filter(({ part }) => !onlyPriced || !!part.price)
       .filter(({ part }) => {
         if (!words.length) return true
         const hay = `${fullName(part)} ${specLine(part)} ${part.partNumber ?? ''}`.toLowerCase()
@@ -66,9 +68,13 @@ export function PartPicker({ catalog, category, selection, onPick, onClose }: Pr
       return sort === 'price-asc' ? pa - pb : pb - pa
     })
     return list
-  }, [withErrors, deferredQuery, brand, onlyCompatible, sort])
+  }, [withErrors, deferredQuery, brand, onlyCompatible, onlyPriced, sort])
 
   const incompatible = withErrors.filter((r) => r.errors.length > 0).length
+  const pricedCount = useMemo(
+    () => withErrors.filter((r) => r.part.price && (!onlyCompatible || r.errors.length === 0)).length,
+    [withErrors, onlyCompatible],
+  )
 
   return (
     <div className="fixed inset-0 z-20 flex items-start justify-center bg-slate-900/40 p-2 sm:p-6" onClick={onClose}>
@@ -111,6 +117,18 @@ export function PartPicker({ catalog, category, selection, onPick, onClose }: Pr
           <label className="flex items-center gap-1.5">
             <input type="checkbox" checked={onlyCompatible} onChange={(e) => setOnlyCompatible(e.target.checked)} />
             Csak kompatibilis
+          </label>
+          <label className="flex items-center gap-1.5" title="Csak azok a termékek, amelyeknek van ára (jelenleg: PCX)">
+            <input
+              type="checkbox"
+              checked={onlyPriced}
+              onChange={(e) => {
+                setOnlyPriced(e.target.checked)
+                // with prices on every row, cheapest-first is the useful order
+                if (e.target.checked && sort === 'newest') setSort('price-asc')
+              }}
+            />
+            Csak árral ({pricedCount.toLocaleString('hu-HU')})
           </label>
         </div>
 
