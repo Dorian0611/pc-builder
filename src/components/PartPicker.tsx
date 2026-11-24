@@ -1,11 +1,12 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import type { Catalog, CategoryInfo } from '../lib/catalog'
 import { candidateErrors } from '../lib/builder'
+import { effectivePrice } from '../lib/estimates'
 import { PriceInfo } from './PriceInfo'
 import { fullName, specLine } from '../lib/specs'
 import type { BuildSelection, Part } from '../lib/types'
 
-type Sort = 'newest' | 'name' | 'price-asc' | 'price-desc'
+type Sort = 'available' | 'newest' | 'name' | 'price-asc' | 'price-desc'
 const PAGE = 100
 
 interface Props {
@@ -21,7 +22,7 @@ export function PartPicker({ catalog, category, selection, onPick, onClose }: Pr
   const [brand, setBrand] = useState('')
   const [onlyCompatible, setOnlyCompatible] = useState(true)
   const [onlyPriced, setOnlyPriced] = useState(false)
-  const [sort, setSort] = useState<Sort>('newest')
+  const [sort, setSort] = useState<Sort>('available')
   const [limit, setLimit] = useState(PAGE)
   const deferredQuery = useDeferredValue(query)
 
@@ -53,13 +54,17 @@ export function PartPicker({ catalog, category, selection, onPick, onClose }: Pr
         const hay = `${fullName(part)} ${specLine(part)} ${part.partNumber ?? ''}`.toLowerCase()
         return words.every((w) => hay.includes(w))
       })
-    const price = (p: Part) => p.price?.medianHuf
+    const price = effectivePrice
+    /** 0 = shop price, 1 = estimated, 2 = no price */
+    const availability = (p: Part) => (p.price ? 0 : p.estimate ? 1 : 2)
     const byName = (a: Part, b: Part) => fullName(a).localeCompare(fullName(b), 'hu')
     list.sort((x, y) => {
       const a = x.part
       const b = y.part
       if (sort === 'name') return byName(a, b)
       if (sort === 'newest') return (b.releaseYear ?? 0) - (a.releaseYear ?? 0) || byName(a, b)
+      if (sort === 'available')
+        return availability(a) - availability(b) || (b.releaseYear ?? 0) - (a.releaseYear ?? 0) || byName(a, b)
       const pa = price(a)
       const pb = price(b)
       if (pa === undefined && pb === undefined) return byName(a, b)
@@ -109,6 +114,7 @@ export function PartPicker({ catalog, category, selection, onPick, onClose }: Pr
             ))}
           </select>
           <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="rounded-md border border-slate-300 px-2 py-1.5">
+            <option value="available">Kapható elöl</option>
             <option value="newest">Legújabb elöl</option>
             <option value="name">Név szerint</option>
             <option value="price-asc">Ár szerint ↑</option>
@@ -125,7 +131,7 @@ export function PartPicker({ catalog, category, selection, onPick, onClose }: Pr
               onChange={(e) => {
                 setOnlyPriced(e.target.checked)
                 // with prices on every row, cheapest-first is the useful order
-                if (e.target.checked && sort === 'newest') setSort('price-asc')
+                if (e.target.checked && (sort === 'newest' || sort === 'available')) setSort('price-asc')
               }}
             />
             Csak árral ({pricedCount.toLocaleString('hu-HU')})

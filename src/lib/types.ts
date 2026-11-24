@@ -39,6 +39,16 @@ export interface PriceBlock {
   flag?: 'jump'
 }
 
+/** Price guessed from comparable priced parts (src/lib/estimates.ts) – never a shop price. */
+export interface PriceEstimate {
+  medianHuf: number
+  /** 25th–75th percentile of the comparable prices */
+  lowHuf: number
+  highHuf: number
+  /** number of comparable priced parts */
+  count: number
+}
+
 interface BasePart {
   /** OpenDB azonosító (UUID) */
   id: string
@@ -48,6 +58,7 @@ interface BasePart {
   partNumber?: string
   releaseYear?: number
   price?: PriceBlock
+  estimate?: PriceEstimate
 }
 
 export interface Cpu extends BasePart {

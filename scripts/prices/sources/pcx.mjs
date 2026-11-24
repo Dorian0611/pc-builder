@@ -1,29 +1,29 @@
 // PCX (pcx.hu) price source.
 //
 // How it works (polite by design):
-//  1. read pcx.hu/robots.txt and stop if product pages are disallowed;
-//  2. read the public sitemaps (~100k URLs) — product URLs end with the manufacturer
-//     part number + PCX id, e.g. ".../geforce-rtx-5070-...-nh-u5veu-001-431516";
-//  3. keep only URLs whose slug ends with a part number we know (OpenDB);
-//  4. fetch those pages one at a time with a delay, read the schema.org Product
-//     JSON-LD (price in HUF, mpn, availability) and accept the offer only if the
-//     page's own mpn matches the part.
+//  1. read pcx.hu/robots.txt and stop if the component listing is disallowed;
+//  2. walk the public "Számítógép alkatrész" listing (?oldal=1..N, ~60 products a page,
+//     ~130 pages), one request every few seconds;
+//  3. each product card carries its name, PCX id and price in the page's ecommerce data;
+//     the manufacturer part number is part of the name ("… (100-100001084WOF)" or the
+//     last word), and the product URL ends with it too;
+//  4. a product counts only if one of those part numbers matches exactly one OpenDB part.
 // We take only the price and the product URL, nothing else from the page.
 //
-// Stop switch: set PCX_DISABLED=1 (or remove pcx from SOURCES) if PCX objects.
+// Stop switch: repository variable PCX_DISABLED=1 (or remove pcx from SOURCES).
 
-import zlib from 'node:zlib'
-import { normalizeMpn } from '../lib.mjs'
+import { buildIndex, normalizeMpn } from '../lib.mjs'
 
 export const name = 'pcx'
 
 const BASE = 'https://www.pcx.hu'
+const LISTING = '/szamitogep_alkatresz'
 export const USER_AGENT = 'pc-builder-price-bot/1.0 (+https://github.com/Dorian0611/pc-builder)'
 /** Pause between page requests. */
-export const DELAY_MS = Number(process.env.PCX_DELAY_MS ?? 2000)
-/** Hard limits so one run stays well inside the GitHub Actions job limit. */
-export const MAX_PAGES = Number(process.env.PCX_MAX_PAGES ?? 4000)
-export const TIME_BUDGET_MS = Number(process.env.PCX_TIME_BUDGET_MIN ?? 150) * 60_000
+export const DELAY_MS = Number(process.env.PCX_DELAY_MS ?? 3000)
+/** Safety limits. */
+export const MAX_LISTING_PAGES = Number(process.env.PCX_MAX_PAGES ?? 400)
+export const TIME_BUDGET_MS = Number(process.env.PCX_TIME_BUDGET_MIN ?? 60) * 60_000
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -33,29 +33,26 @@ const REQUEST_TIMEOUT_MS = 30_000
 const NETWORK_RETRIES = 3
 
 /**
- * GET with timeout and retries. Network errors (reset, timeout, DNS) are retried
- * with a growing pause; if they persist, returns { status: 0, body: null } so the
- * caller can skip that page instead of losing the whole run.
+ * GET with timeout and retries. Network errors are retried with a growing pause; if they
+ * persist, returns { status: 0, body: null, error } so the caller can skip that page.
+ * 403/429 twice in a row means PCX is refusing us: throw and stop.
  */
-async function get(url, { binary = false } = {}) {
+async function get(url) {
   for (let attempt = 1; ; attempt++) {
     let res
     try {
       res = await fetch(url, {
-        headers: { 'User-Agent': USER_AGENT, Accept: binary ? '*/*' : 'text/html,application/xml' },
+        headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' },
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       })
     } catch (e) {
-      if (attempt >= NETWORK_RETRIES) {
-        const code = e?.cause?.code ?? e?.name ?? 'network error'
-        return { status: 0, body: null, error: String(code) }
-      }
+      if (attempt >= NETWORK_RETRIES) return { status: 0, body: null, error: String(e?.cause?.code ?? e?.name ?? 'network error') }
       await sleep(15_000 * attempt)
       continue
     }
     if (res.status === 403 || res.status === 429) {
       if (attempt >= 2) throw new Blocked(`${res.status} for ${url} – PCX is refusing us, stopping`)
-      await sleep(60_000) // back off once, then give up
+      await sleep(60_000)
       continue
     }
     if (res.status >= 500 && attempt < 3) {
@@ -63,7 +60,7 @@ async function get(url, { binary = false } = {}) {
       continue
     }
     if (!res.ok) return { status: res.status, body: null }
-    return { status: res.status, body: binary ? Buffer.from(await res.arrayBuffer()) : await res.text() }
+    return { status: res.status, body: await res.text() }
   }
 }
 
@@ -101,8 +98,6 @@ export function robotsAllows(robotsTxt, path) {
   return !best || best.allow
 }
 
-export const sitemapLocs = (xml) => [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)].map((m) => m[1])
-
 /** Part numbers worth looking for in URL slugs: long enough and mixing letters and digits. */
 export function slugKeysFromIdentifiers(identifiers) {
   /** @type {Map<string, string>} normalized mpn → partId (ambiguous ones removed) */
@@ -135,39 +130,61 @@ export function matchProductUrl(url, keys) {
   return null
 }
 
-const IN_STOCK = /InStock|LimitedAvailability|InStoreOnly|OnlineOnly/i
-
-/** Reads the schema.org Product from the page's JSON-LD blocks. */
-export function parseProductPage(html) {
-  for (const m of html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
-    let data
-    try {
-      data = JSON.parse(m[1].trim())
-    } catch {
-      continue
-    }
-    const nodes = Array.isArray(data) ? data : data['@graph'] ?? [data]
-    for (const node of nodes) {
-      if (node?.['@type'] !== 'Product') continue
-      const offer = Array.isArray(node.offers) ? node.offers[0] : node.offers
-      if (!offer) continue
-      const price = Number(offer.price ?? offer.lowPrice)
-      return {
-        mpn: node.mpn ? String(node.mpn) : undefined,
-        gtin: node.gtin13 ?? node.gtin ?? undefined,
-        priceHuf: Number.isFinite(price) ? Math.round(price) : NaN,
-        currency: offer.priceCurrency,
-        inStock: IN_STOCK.test(String(offer.availability ?? '')),
-      }
-    }
+const decodeJsonString = (s) => {
+  try {
+    return JSON.parse(`"${s}"`)
+  } catch {
+    return s
   }
-  return null
+}
+
+/**
+ * Reads one listing page: products from the cards' ecommerce data
+ * (`"products":{"name":…,"id":…,"price":…}`), their URLs, and the last page number.
+ */
+export function parseListingPage(html) {
+  const urls = new Map()
+  for (const m of html.matchAll(/href="(\/[a-z0-9-]+-(\d{4,}))"/gi)) if (!urls.has(m[2])) urls.set(m[2], BASE + m[1])
+  const items = new Map()
+  for (const m of html.matchAll(/"products":\{"name":"((?:[^"\\]|\\.)*)","id":"(\d+)","price":"([\d.]+)"/g)) {
+    const id = m[2]
+    if (items.has(id)) continue
+    items.set(id, { id, name: decodeJsonString(m[1]), priceHuf: Math.round(Number(m[3])), url: urls.get(id) })
+  }
+  let lastPage = 1
+  for (const m of html.matchAll(/_steperOnChange\('(\d+)','stepp'\)/g)) lastPage = Math.max(lastPage, Number(m[1]))
+  return { items: [...items.values()], lastPage }
+}
+
+/**
+ * Possible manufacturer part numbers in a PCX product name: everything in parentheses
+ * (also split on separators), and the last one or two words.
+ * Only tokens with a digit and at least 5 characters are kept.
+ */
+export function mpnCandidates(productName) {
+  const out = []
+  for (const m of productName.matchAll(/\(([^()]+)\)/g)) {
+    out.push(m[1])
+    out.push(...m[1].split(/[,;]\s*|\s+/))
+  }
+  const words = productName.replace(/\([^()]*\)/g, ' ').trim().split(/\s+/)
+  out.push(words.at(-1) ?? '', words.slice(-2).join(' '))
+  return [...new Set(out.map((s) => s.trim()))].filter((s) => normalizeMpn(s).length >= 5 && /\d/.test(s))
+}
+
+/** Matches a listing item to an OpenDB part: part number in the name first, then the URL slug. */
+export function matchListingItem(item, index, slugKeys) {
+  for (const c of mpnCandidates(item.name)) {
+    const id = index.mpn.get(normalizeMpn(c))
+    if (id) return id
+  }
+  return (item.url && matchProductUrl(item.url, slugKeys)?.partId) || undefined
 }
 
 // ---------------------------------------------------------------- source
 
 /** @returns {Promise<import('../lib.mjs').Offer[]>} */
-export async function fetchOffers({ identifiers, log = console.log, dryRun = false }) {
+export async function fetchOffers({ identifiers, log = console.log, maxPages = MAX_LISTING_PAGES }) {
   if (process.env.PCX_DISABLED === '1') {
     log('pcx: disabled (PCX_DISABLED=1)')
     return []
@@ -175,73 +192,49 @@ export async function fetchOffers({ identifiers, log = console.log, dryRun = fal
   const started = Date.now()
 
   const robots = (await get(`${BASE}/robots.txt`)).body ?? ''
-  if (!robotsAllows(robots, '/sitemap-index.xml') || !robotsAllows(robots, '/some-product-123456'))
-    throw new Error('robots.txt disallows sitemaps or product pages – not collecting')
+  if (!robotsAllows(robots, LISTING) || !robotsAllows(robots, `${LISTING}?oldal=2`))
+    throw new Error('robots.txt disallows the component listing – not collecting')
 
-  const keys = slugKeysFromIdentifiers(identifiers)
-  const index = (await get(`${BASE}/sitemap-index.xml`)).body ?? ''
-  /** @type {Map<string, {partId: string, key: string}>} */
-  const candidates = new Map()
-  let urlCount = 0
-  for (const sm of sitemapLocs(index)) {
-    await sleep(DELAY_MS)
-    const { body } = await get(sm, { binary: true })
-    if (!body) continue
-    const xml = sm.endsWith('.gz') ? zlib.gunzipSync(body).toString('utf8') : body.toString('utf8')
-    for (const url of sitemapLocs(xml)) {
-      urlCount++
-      const hit = matchProductUrl(url, keys)
-      if (hit && robotsAllows(robots, new URL(url).pathname)) candidates.set(url, hit)
-    }
-  }
-  log(`pcx: ${urlCount} URLs in sitemaps, ${candidates.size} look like our parts`)
-  if (dryRun) return [...candidates].map(([url, c]) => ({ source: name, shop: 'PCX', priceHuf: NaN, partId: c.partId, url }))
+  const index = buildIndex(identifiers)
+  const slugKeys = slugKeysFromIdentifiers(identifiers)
 
   const offers = []
+  let lastPage = 1
   let fetched = 0
-  let mismatched = 0
-  let outOfStock = 0
+  let listed = 0
   let networkErrors = 0
   let consecutiveErrors = 0
-  for (const [url, { partId }] of candidates) {
-    if (fetched >= MAX_PAGES || Date.now() - started > TIME_BUDGET_MS) {
-      log(`pcx: stopping early at ${fetched} pages (limit reached)`)
+  for (let page = 1; page <= Math.min(lastPage, maxPages); page++) {
+    if (Date.now() - started > TIME_BUDGET_MS) {
+      log(`pcx: stopping early at page ${page} (time limit)`)
       break
     }
-    await sleep(DELAY_MS)
+    if (page > 1) await sleep(DELAY_MS)
+    const { body, error } = await get(`${BASE}${LISTING}${page > 1 ? `?oldal=${page}` : ''}`)
     fetched++
-    const { body, error } = await get(url)
-    if (error) {
+    if (error || !body) {
       networkErrors++
       consecutiveErrors++
-      log(`pcx: network error (${error}) on ${url}`)
-      // the site is probably down or dropping us: keep what we have, don't hammer it
-      if (consecutiveErrors >= 10) {
-        log('pcx: 10 network errors in a row, stopping early')
+      log(`pcx: page ${page} failed (${error ?? 'no body'})`)
+      if (consecutiveErrors >= 5) {
+        log('pcx: 5 failed pages in a row, stopping early')
         break
       }
       continue
     }
     consecutiveErrors = 0
-    if (!body) continue
-    const p = parseProductPage(body)
-    if (!p || p.currency !== 'HUF' || !Number.isFinite(p.priceHuf)) continue
-    // the page must confirm the part number we guessed from the URL
-    const ids = identifiers[partId]?.mpn ?? []
-    if (!p.mpn || !ids.some((m) => normalizeMpn(m) === normalizeMpn(p.mpn))) {
-      mismatched++
-      continue
+    const parsed = parseListingPage(body)
+    if (page === 1) lastPage = parsed.lastPage
+    listed += parsed.items.length
+    for (const item of parsed.items) {
+      if (!(item.priceHuf > 0)) continue
+      const partId = matchListingItem(item, index, slugKeys)
+      if (partId) offers.push({ source: name, shop: 'PCX', priceHuf: item.priceHuf, partId, url: item.url })
     }
-    if (!p.inStock) {
-      outOfStock++
-      continue
-    }
-    offers.push({ source: name, shop: 'PCX', priceHuf: p.priceHuf, partId, url })
   }
-  log(`pcx: ${fetched} pages fetched, ${offers.length} prices, ${outOfStock} out of stock, ${mismatched} part-number mismatches, ${networkErrors} network errors, ${Math.round((Date.now() - started) / 60000)} min`)
-  // Many failures = something is wrong: return the prices we got, but let the run fail (→ e-mail).
-  if (networkErrors > Math.max(20, fetched * 0.1)) {
-    const err = new Error(`${networkErrors} network errors out of ${fetched} pages`)
+  log(`pcx: ${fetched}/${lastPage} listing pages, ${listed} products listed, ${offers.length} matched to our parts, ${networkErrors} failed pages, ${Math.round((Date.now() - started) / 60000)} min`)
+  if (networkErrors > Math.max(5, fetched * 0.1)) {
+    const err = new Error(`${networkErrors} failed pages out of ${fetched}`)
     err.partialOffers = offers
     throw err
   }

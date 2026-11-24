@@ -16,7 +16,8 @@ interface Props {
 }
 
 export function Summary({ build, checks }: Props) {
-  const { totalHuf, priced, missingPrice } = totalPrice(build)
+  const { totalHuf, priced, estimated, missingPrice } = totalPrice(build)
+  const counted = priced + estimated
   const power = estimatePower(build)
   const worst = worstLevel(checks)
   const missingRequired = CATEGORIES.filter((c) => {
@@ -32,11 +33,16 @@ export function Summary({ build, checks }: Props) {
     <aside className="space-y-4">
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <div className="text-sm text-slate-500">Becsült végösszeg</div>
-        <div className="text-3xl font-semibold tabular-nums">{priced > 0 ? formatHuf(totalHuf) : '–'}</div>
-        {missingPrice > 0 && priced > 0 && <div className="mt-1 text-sm text-slate-500">{missingPrice} alkatrésznek nincs ára</div>}
-        {priced === 0 && <div className="mt-1 text-sm text-slate-500">A kiválasztott alkatrészeknek még nincs ára.</div>}
-        {priced > 0 && (
-          <div className="mt-1 text-xs text-slate-500">Az elérhető bolti árak alapján (jelenleg: PCX).</div>
+        <div className="text-3xl font-semibold tabular-nums">
+          {counted > 0 ? `${estimated > 0 ? '≈ ' : ''}${formatHuf(totalHuf)}` : '–'}
+        </div>
+        {counted === 0 && <div className="mt-1 text-sm text-slate-500">A kiválasztott alkatrészeknek még nincs ára.</div>}
+        {counted > 0 && (
+          <ul className="mt-1 space-y-0.5 text-xs text-slate-500">
+            {priced > 0 && <li>{priced} alkatrész bolti áron (jelenleg: PCX)</li>}
+            {estimated > 0 && <li className="text-amber-700">{estimated} alkatrész becsült áron (hasonló termékek alapján)</li>}
+            {missingPrice > 0 && <li>{missingPrice} alkatrésznek nincs ára – nem számoltuk bele</li>}
+          </ul>
         )}
         <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <dt className="text-slate-500">Becsült csúcsfogyasztás</dt>

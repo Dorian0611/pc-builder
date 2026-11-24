@@ -1,3 +1,4 @@
+import { addEstimates } from './estimates'
 import type {
   BuildSelection,
   CatalogData,
@@ -78,6 +79,7 @@ export async function loadCatalog(baseUrl = `${import.meta.env.BASE_URL}data/`):
   ])
   const data = Object.fromEntries(CATEGORIES.map((c, i) => [c.id, lists[i]])) as CatalogData
   attachPrices(data, prices)
+  addEstimates(data)
   return { catalog: createCatalog(data), meta }
 }
 

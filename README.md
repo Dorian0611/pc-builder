@@ -28,13 +28,17 @@ npm run build   # static build into dist/
 `scripts/prices/update-prices.mjs` runs every night (`.github/workflows/update-prices.yml`):
 
 1. each source in `SOURCES` returns shop offers: `manual` (`data/offers/manual.csv`) and `pcx`
-   (pcx.hu: robots.txt-checked, sitemap → product pages whose slug ends in a known part number,
-   schema.org JSON-LD price, one request every 2 s, `PCX_DISABLED=1` turns it off);
+   (pcx.hu: robots.txt-checked; walks the ~130-page component listing, one request every 3 s;
+   the part number comes from the product name or URL; `PCX_DISABLED=1` turns it off);
 2. offers are matched to parts by EAN or manufacturer part number (`data/part-identifiers.json`,
    written by the OpenDB importer); identifiers shared by several parts are ignored;
 3. per part: median price, lowest price, number of distinct shops → `public/data/prices.json`;
 4. a part without fresh offers keeps its last price for up to 14 days; a median change over 40% is flagged;
 5. changed prices are appended to `data/price-history/YYYY-MM.csv`.
+
+Parts without a shop price get an **estimate** in the browser (`src/lib/estimates.ts`): the median
+of comparable priced parts (same GPU chip + VRAM, same CPU, same SSD size/interface, …), shown
+with its 25–75% range and always labelled as an estimate.
 
 A failing source doesn't stop the others, but the workflow fails so GitHub sends an e-mail.
 To add a source, create `scripts/prices/sources/<name>.mjs` exporting `name` and

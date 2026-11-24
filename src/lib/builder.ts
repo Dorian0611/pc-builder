@@ -17,17 +17,29 @@ export function buildParts(b: ResolvedBuild): Part[] {
   )
 }
 
-export function totalPrice(b: ResolvedBuild): { totalHuf: number; priced: number; missingPrice: number } {
-  let totalHuf = 0
-  let priced = 0
-  let missingPrice = 0
+export interface PriceTotal {
+  /** real prices + estimates */
+  totalHuf: number
+  /** parts with a real shop price */
+  priced: number
+  /** parts counted with an estimated price */
+  estimated: number
+  /** parts with neither */
+  missingPrice: number
+}
+
+export function totalPrice(b: ResolvedBuild): PriceTotal {
+  const t: PriceTotal = { totalHuf: 0, priced: 0, estimated: 0, missingPrice: 0 }
   for (const p of buildParts(b)) {
     if (p.price) {
-      totalHuf += p.price.medianHuf
-      priced++
-    } else missingPrice++
+      t.totalHuf += p.price.medianHuf
+      t.priced++
+    } else if (p.estimate) {
+      t.totalHuf += p.estimate.medianHuf
+      t.estimated++
+    } else t.missingPrice++
   }
-  return { totalHuf, priced, missingPrice }
+  return t
 }
 
 export const formatHuf = (n: number) =>
