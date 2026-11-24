@@ -1,0 +1,8 @@
+[
+  { "id": "cool-tr-pa120se", "category": "cooler", "brand": "Thermalright", "name": "Peerless Assassin 120 SE", "type": "air", "sockets": ["AM4", "AM5", "LGA 1700", "LGA 1851"], "heightMm": 155, "price": { "medianHuf": 16990, "minHuf": 15490, "offerCount": 18, "updatedAt": "2026-11-24" } },
+  { "id": "cool-noctua-d15g2", "category": "cooler", "brand": "Noctua", "name": "NH-D15 G2", "type": "air", "sockets": ["AM4", "AM5", "LGA 1700", "LGA 1851"], "heightMm": 168, "price": { "medianHuf": 64990, "minHuf": 61990, "offerCount": 12, "updatedAt": "2026-11-24" } },
+  { "id": "cool-bq-purerock3", "category": "cooler", "brand": "be quiet!", "name": "Pure Rock 3", "type": "air", "sockets": ["AM4", "AM5", "LGA 1700", "LGA 1851"], "heightMm": 155, "price": { "medianHuf": 15990, "minHuf": 14490, "offerCount": 16, "updatedAt": "2026-11-24" } },
+  { "id": "cool-noctua-l9a-am5", "category": "cooler", "brand": "Noctua", "name": "NH-L9a-AM5", "type": "air", "sockets": ["AM5"], "heightMm": 37, "price": { "medianHuf": 22990, "minHuf": 21490, "offerCount": 7, "updatedAt": "2026-11-24" } },
+  { "id": "cool-arctic-lf3-360", "category": "cooler", "brand": "ARCTIC", "name": "Liquid Freezer III Pro 360", "type": "aio", "sockets": ["AM4", "AM5", "LGA 1700", "LGA 1851"], "radiatorMm": 360, "price": { "medianHuf": 39990, "minHuf": 37490, "offerCount": 14, "updatedAt": "2026-11-24" } },
+  { "id": "cool-dc-le520", "category": "cooler", "brand": "DeepCool", "name": "LE520 240mm", "type": "aio", "sockets": ["AM4", "AM5", "LGA 1700"], "radiatorMm": 240, "price": { "medianHuf": 24990, "minHuf": 22990, "offerCount": 13, "updatedAt": "2026-11-24" } }
+]

@@ -1,0 +1,7 @@
+[
+  { "id": "ssd-sam-990pro-1tb", "category": "storage", "brand": "Samsung", "name": "990 PRO 1TB", "partNumber": "MZ-V9P1T0BW", "interface": "M.2 NVMe", "capacityGb": 1000, "kind": "SSD", "price": { "medianHuf": 44990, "minHuf": 41990, "offerCount": 29, "updatedAt": "2026-11-24" } },
+  { "id": "ssd-wd-sn850x-2tb", "category": "storage", "brand": "WD", "name": "Black SN850X 2TB", "partNumber": "WDS200T2X0E", "interface": "M.2 NVMe", "capacityGb": 2000, "kind": "SSD", "price": { "medianHuf": 69990, "minHuf": 65990, "offerCount": 24, "updatedAt": "2026-11-24" } },
+  { "id": "ssd-king-nv3-1tb", "category": "storage", "brand": "Kingston", "name": "NV3 1TB", "partNumber": "SNV3S/1000G", "interface": "M.2 NVMe", "capacityGb": 1000, "kind": "SSD", "price": { "medianHuf": 24990, "minHuf": 22990, "offerCount": 33, "updatedAt": "2026-11-24" } },
+  { "id": "ssd-cru-mx500-1tb", "category": "storage", "brand": "Crucial", "name": "MX500 1TB 2.5\"", "partNumber": "CT1000MX500SSD1", "interface": "SATA", "capacityGb": 1000, "kind": "SSD", "price": { "medianHuf": 29990, "minHuf": 27990, "offerCount": 30, "updatedAt": "2026-11-24" } },
+  { "id": "hdd-sea-barracuda-2tb", "category": "storage", "brand": "Seagate", "name": "BarraCuda 2TB 3.5\"", "partNumber": "ST2000DM008", "interface": "SATA", "capacityGb": 2000, "kind": "HDD", "price": { "medianHuf": 26990, "minHuf": 24990, "offerCount": 28, "updatedAt": "2026-11-24" } }
+]

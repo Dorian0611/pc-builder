@@ -1,0 +1,18 @@
+{
+  "source": "BuildCores OpenDB",
+  "sourceUrl": "https://github.com/buildcores/buildcores-open-db",
+  "license": "CC BY-NC-SA 4.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+  "commit": "037bf2292e59fc4dc353168f0b4c75efb08e58c7",
+  "importedAt": "2026-11-24T18:00:53.173Z",
+  "counts": {
+    "cpu": 440,
+    "motherboard": 2818,
+    "memory": 4390,
+    "gpu": 3818,
+    "storage": 3154,
+    "psu": 3253,
+    "case": 3826,
+    "cooler": 2379
+  }
+}
