@@ -28,6 +28,9 @@ jobs:
       - name: Collect prices
         id: collect
         run: node scripts/prices/update-prices.mjs
+        env:
+          # Off switch without a code change: Settings → Secrets and variables → Actions → Variables
+          PCX_DISABLED: ${{ vars.PCX_DISABLED }}
 
       - name: Commit changes
         id: commit
