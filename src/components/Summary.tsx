@@ -29,7 +29,7 @@ export function Summary({ build, checks }: Props) {
   const oks = sorted.filter((c) => c.level === 'ok')
 
   return (
-    <aside className="space-y-4 lg:sticky lg:top-4">
+    <aside className="space-y-4">
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <div className="text-sm text-slate-500">Becsült végösszeg</div>
         <div className="text-3xl font-semibold tabular-nums">{priced > 0 ? formatHuf(totalHuf) : '–'}</div>

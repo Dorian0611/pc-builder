@@ -7,6 +7,8 @@ import { PartPicker } from './components/PartPicker'
 import { Summary } from './components/Summary'
 import { Footer } from './components/Footer'
 import { PriceInfo } from './components/PriceInfo'
+import { Build3DPanel } from './components/Build3DPanel'
+import { buildParts } from './lib/builder'
 
 const STORAGE_KEY = 'pc-builder:current'
 
@@ -153,7 +155,10 @@ function Builder({ catalog, meta }: { catalog: Catalog; meta: CatalogMeta }) {
           })}
         </main>
 
-        <Summary build={build} checks={checks} />
+        <div className="min-w-0 space-y-4 lg:sticky lg:top-4 lg:self-start">
+          <Build3DPanel build={build} levels={partLevel} parts={buildParts(build)} />
+          <Summary build={build} checks={checks} />
+        </div>
       </div>
 
       <Footer meta={meta} />

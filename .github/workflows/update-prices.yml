@@ -44,6 +44,8 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "Update prices $(date -u +%F)"
+            # main may have moved during the long run: rebase our data commit on top
+            git pull --rebase origin main
             git push
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
