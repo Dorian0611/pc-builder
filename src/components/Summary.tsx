@@ -36,7 +36,7 @@ export function Summary({ build, checks }: Props) {
         {missingPrice > 0 && priced > 0 && <div className="mt-1 text-sm text-slate-500">{missingPrice} alkatrésznek nincs ára</div>}
         {priced === 0 && <div className="mt-1 text-sm text-slate-500">A kiválasztott alkatrészeknek még nincs ára.</div>}
         {priced > 0 && (
-          <div className="mt-1 text-xs text-slate-500">Bolti ajánlatok mediánja (középső ára) alapján.</div>
+          <div className="mt-1 text-xs text-slate-500">Az elérhető bolti árak alapján (jelenleg: PCX).</div>
         )}
         <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
           <dt className="text-slate-500">Becsült csúcsfogyasztás</dt>

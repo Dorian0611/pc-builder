@@ -15,9 +15,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { aggregate, buildIndex, historyRows, isValidOffer, matchOffer, mergePrices } from './lib.mjs'
 import * as manual from './sources/manual.mjs'
+import * as pcx from './sources/pcx.mjs'
 
-/** Enabled sources. Add Árukereső / Árgép / shop feeds here once permitted. */
-const SOURCES = [manual]
+/** Enabled sources. Árukereső / Árgép only once they give permission. */
+const SOURCES = [manual, pcx]
 
 const root = path.resolve(import.meta.dirname, '../..')
 const dateArg = process.argv.indexOf('--date')
@@ -36,7 +37,7 @@ const failures = []
 const matched = []
 for (const source of SOURCES) {
   try {
-    const offers = await source.fetchOffers({ root, today })
+    const offers = await source.fetchOffers({ root, today, identifiers })
     let ok = 0
     let unmatched = 0
     let invalid = 0

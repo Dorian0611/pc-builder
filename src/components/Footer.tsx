@@ -14,6 +14,14 @@ export function Footer({ meta }: { meta: CatalogMeta }) {
       </a>
       . Módosítások: a mai asztali platformokra szűrt részhalmaz, mezőnevek és mértékegységek átalakítva, a tápméret egyes
       házaknál az alaplapméretből becsülve. Az átalakított adatok ugyanezen licenc alatt érhetők el.
+      <p className="mt-2">
+        Árak: a{' '}
+        <a className="underline" href="https://www.pcx.hu" target="_blank" rel="noreferrer">
+          PCX
+        </a>{' '}
+        webáruház készleten lévő termékeinek ára, naponta egyszer frissítve. Ez egy bolt ára, nem piaci átlag – a
+        további ajánlatokat az „Árak az Árukeresőn” link mutatja. Az árak tájékoztató jellegűek.
+      </p>
     </footer>
   )
 }

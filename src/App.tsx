@@ -131,7 +131,7 @@ function Builder({ catalog, meta }: { catalog: Catalog; meta: CatalogMeta }) {
                         <div className="truncate text-sm text-slate-500">{specLine(p)}</div>
                       </div>
                       <div className="shrink-0">
-                        <PriceInfo price={p.price} />
+                        <PriceInfo part={p} />
                       </div>
                       {!cat.multi && (
                         <button onClick={() => setPicking(cat)} className="text-sm text-blue-700 hover:underline">

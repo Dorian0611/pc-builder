@@ -27,7 +27,9 @@ npm run build   # static build into dist/
 
 `scripts/prices/update-prices.mjs` runs every night (`.github/workflows/update-prices.yml`):
 
-1. each source in `SOURCES` returns shop offers (currently only `manual`: `data/offers/manual.csv`);
+1. each source in `SOURCES` returns shop offers: `manual` (`data/offers/manual.csv`) and `pcx`
+   (pcx.hu: robots.txt-checked, sitemap → product pages whose slug ends in a known part number,
+   schema.org JSON-LD price, one request every 2 s, `PCX_DISABLED=1` turns it off);
 2. offers are matched to parts by EAN or manufacturer part number (`data/part-identifiers.json`,
    written by the OpenDB importer); identifiers shared by several parts are ignored;
 3. per part: median price, lowest price, number of distinct shops → `public/data/prices.json`;

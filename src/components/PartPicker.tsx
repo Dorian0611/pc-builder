@@ -128,7 +128,7 @@ export function PartPicker({ catalog, category, selection, onPick, onClose }: Pr
                 )}
               </div>
               <div className="shrink-0">
-                <PriceInfo price={part.price} compact />
+                <PriceInfo part={part} compact />
               </div>
               <button
                 onClick={() => onPick(part)}

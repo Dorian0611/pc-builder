@@ -94,6 +94,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   manual: 'kézi',
   arukereso: 'Árukereső',
   argep: 'Árgép',
+  pcx: 'PCX',
 }
 
 /** Egy kategória egy elemének hozzáadása / cseréje a választáshoz. */
