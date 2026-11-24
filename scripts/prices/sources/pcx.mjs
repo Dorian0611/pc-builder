@@ -13,122 +13,21 @@
 // Stop switch: repository variable PCX_DISABLED=1 (or remove pcx from SOURCES).
 
 import { buildIndex, normalizeMpn } from '../lib.mjs'
+import { get, robotsAllows, sleep } from '../http.mjs'
+import { matchProductUrl, slugKeysFromIdentifiers } from '../match.mjs'
+
+// re-exported for the tests
+export { robotsAllows, matchProductUrl, slugKeysFromIdentifiers }
 
 export const name = 'pcx'
 
 const BASE = 'https://www.pcx.hu'
 const LISTING = '/szamitogep_alkatresz'
-export const USER_AGENT = 'pc-builder-price-bot/1.0 (+https://github.com/Dorian0611/pc-builder)'
 /** Pause between page requests. */
 export const DELAY_MS = Number(process.env.PCX_DELAY_MS ?? 3000)
 /** Safety limits. */
 export const MAX_LISTING_PAGES = Number(process.env.PCX_MAX_PAGES ?? 400)
 export const TIME_BUDGET_MS = Number(process.env.PCX_TIME_BUDGET_MIN ?? 60) * 60_000
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-
-class Blocked extends Error {}
-
-const REQUEST_TIMEOUT_MS = 30_000
-const NETWORK_RETRIES = 3
-
-/**
- * GET with timeout and retries. Network errors are retried with a growing pause; if they
- * persist, returns { status: 0, body: null, error } so the caller can skip that page.
- * 403/429 twice in a row means PCX is refusing us: throw and stop.
- */
-async function get(url) {
-  for (let attempt = 1; ; attempt++) {
-    let res
-    try {
-      res = await fetch(url, {
-        headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      })
-    } catch (e) {
-      if (attempt >= NETWORK_RETRIES) return { status: 0, body: null, error: String(e?.cause?.code ?? e?.name ?? 'network error') }
-      await sleep(15_000 * attempt)
-      continue
-    }
-    if (res.status === 403 || res.status === 429) {
-      if (attempt >= 2) throw new Blocked(`${res.status} for ${url} – PCX is refusing us, stopping`)
-      await sleep(60_000)
-      continue
-    }
-    if (res.status >= 500 && attempt < 3) {
-      await sleep(10_000 * attempt)
-      continue
-    }
-    if (!res.ok) return { status: res.status, body: null }
-    return { status: res.status, body: await res.text() }
-  }
-}
-
-// ---------------------------------------------------------------- pure helpers (unit tested)
-
-/**
- * Very small robots.txt reader: the Disallow/Allow rules of the "*" group,
- * longest match wins, "*" and "$" wildcards supported.
- */
-export function robotsAllows(robotsTxt, path) {
-  const rules = []
-  let inStar = false
-  let groupHasRules = false
-  for (const raw of robotsTxt.split(/\r?\n/)) {
-    const line = raw.replace(/#.*/, '').trim()
-    const m = line.match(/^([a-z-]+)\s*:\s*(.*)$/i)
-    if (!m) continue
-    const key = m[1].toLowerCase()
-    const val = m[2].trim()
-    if (key === 'user-agent') {
-      if (groupHasRules) (inStar = false), (groupHasRules = false)
-      if (val === '*') inStar = true
-    } else if (key === 'allow' || key === 'disallow') {
-      groupHasRules = true
-      if (inStar && val) rules.push({ allow: key === 'allow', pattern: val })
-    }
-  }
-  const toRegex = (p) =>
-    new RegExp('^' + p.replace(/[.+?^${}()|[\]\\]/g, (c) => (c === '$' ? '$' : '\\' + c)).replace(/\*/g, '.*').replace(/\\\$$/, '$'))
-  let best = null
-  for (const r of rules) {
-    if (toRegex(r.pattern).test(path) && (!best || r.pattern.length > best.pattern.length || (r.pattern.length === best.pattern.length && r.allow)))
-      best = r
-  }
-  return !best || best.allow
-}
-
-/** Part numbers worth looking for in URL slugs: long enough and mixing letters and digits. */
-export function slugKeysFromIdentifiers(identifiers) {
-  /** @type {Map<string, string>} normalized mpn → partId (ambiguous ones removed) */
-  const keys = new Map()
-  for (const [id, ids] of Object.entries(identifiers)) {
-    for (const m of ids.mpn ?? []) {
-      const k = normalizeMpn(m).toLowerCase()
-      if (k.length < 6 || !/[a-z]/.test(k) || !/\d/.test(k)) continue
-      const cur = keys.get(k)
-      keys.set(k, cur === undefined || cur === id ? id : null)
-    }
-  }
-  for (const [k, v] of keys) if (v === null) keys.delete(k)
-  return keys
-}
-
-/**
- * If the URL slug ends with a known part number (before the trailing "-<pcx id>"),
- * returns { partId, key }. Longest matching key wins.
- */
-export function matchProductUrl(url, keys) {
-  const m = url.match(/^https?:\/\/[^/]+\/([a-z0-9-]+)-(\d+)$/i)
-  if (!m) return null
-  const slug = m[1].toLowerCase().replace(/-/g, '')
-  for (let len = Math.min(40, slug.length); len >= 6; len--) {
-    const key = slug.slice(slug.length - len)
-    const partId = keys.get(key)
-    if (partId) return { partId, key }
-  }
-  return null
-}
 
 const decodeJsonString = (s) => {
   try {

@@ -97,6 +97,8 @@ export const SOURCE_LABELS: Record<string, string> = {
   arukereso: 'Árukereső',
   argep: 'Árgép',
   pcx: 'PCX',
+  ipon: 'iPon',
+  emag: 'eMAG',
 }
 
 /** Egy kategória egy elemének hozzáadása / cseréje a választáshoz. */

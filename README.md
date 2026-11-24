@@ -25,15 +25,25 @@ npm run build   # static build into dist/
 
 ## Prices
 
-`scripts/prices/update-prices.mjs` runs every night (`.github/workflows/update-prices.yml`):
+Prices are collected twice a month (1st and 15th, `.github/workflows/update-prices.yml`): one job per
+shop runs `scripts/prices/collect.mjs` in parallel, then `scripts/prices/update-prices.mjs --offers-dir`
+merges them:
 
-1. each source in `SOURCES` returns shop offers: `manual` (`data/offers/manual.csv`) and `pcx`
-   (pcx.hu: robots.txt-checked; walks the ~130-page component listing, one request every 3 s;
-   the part number comes from the product name or URL; `PCX_DISABLED=1` turns it off);
+1. each source in `scripts/prices/sources/index.mjs` returns shop offers:
+   - `manual` – `data/offers/manual.csv`;
+   - `pcx` – walks the ~130-page component listing; part number from the product name or URL;
+   - `ipon`, `emag` – generic sitemap → product page → schema.org JSON-LD source
+     (`sources/sitemap-shop.mjs`): only pages whose URL contains a known part number are fetched,
+     and an offer counts only if the page's own MPN/EAN belongs to that part.
+
+   Shops are included only if robots.txt allows it and they serve the bot without a challenge
+   (Aqua, Alza: refused; MediaMarkt: prices only via JavaScript). Every request identifies itself
+   (`pc-builder-price-bot`), one at a time with a 3 s pause. Off switch per shop: repository
+   variable `PCX_DISABLED` / `IPON_DISABLED` / `EMAG_DISABLED` = `1`;
 2. offers are matched to parts by EAN or manufacturer part number (`data/part-identifiers.json`,
    written by the OpenDB importer); identifiers shared by several parts are ignored;
 3. per part: median price, lowest price, number of distinct shops → `public/data/prices.json`;
-4. a part without fresh offers keeps its last price for up to 14 days; a median change over 40% is flagged;
+4. a part without fresh offers keeps its last price for up to 35 days; a median change over 40% is flagged;
 5. changed prices are appended to `data/price-history/YYYY-MM.csv`.
 
 Parts without a shop price get an **estimate** in the browser (`src/lib/estimates.ts`): the median

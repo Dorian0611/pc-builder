@@ -85,7 +85,7 @@ describe('mergePrices', () => {
     medianHuf, minHuf: medianHuf, offerCount: 3, updatedAt, sources: ['manual'],
   })
   it('keeps the last good price when a part has no fresh offers, until it gets too old', () => {
-    const prev = { keep: p(1000, '2026-11-20'), stale: p(1000, '2026-11-01') }
+    const prev = { keep: p(1000, '2026-11-20'), stale: p(1000, '2026-10-01') }
     const r = mergePrices(prev, {}, '2026-11-24')
     expect(r.keep.updatedAt).toBe('2026-11-20')
     expect(r.stale).toBeUndefined()

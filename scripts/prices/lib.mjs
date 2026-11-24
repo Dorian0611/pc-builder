@@ -112,8 +112,11 @@ export function aggregate(matched, today) {
 
 /** Median change above this ratio (either way) gets flagged for review. */
 export const JUMP_RATIO = 0.4
-/** Prices not refreshed for this many days are dropped (product probably gone). */
-export const MAX_AGE_DAYS = 14
+/**
+ * Prices not refreshed for this many days are dropped (product probably gone).
+ * Runs are ~15 days apart, so a price survives one missed run.
+ */
+export const MAX_AGE_DAYS = 35
 
 const daysBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
 

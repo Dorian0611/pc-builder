@@ -1,6 +1,9 @@
-// Nightly price update.
+// Price update (scheduled twice a month).
 //
-//   node scripts/prices/update-prices.mjs [--date YYYY-MM-DD]
+//   node scripts/prices/update-prices.mjs [--date YYYY-MM-DD] [--offers-dir offers]
+//
+// Without --offers-dir every source runs here, one after another (handy locally).
+// With it, the offers collected by the per-shop jobs (scripts/prices/collect.mjs) are used.
 //
 // 1. every enabled source returns offers
 // 2. offers are matched to parts by EAN / manufacturer part number
@@ -14,15 +17,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { aggregate, buildIndex, historyRows, isValidOffer, matchOffer, mergePrices } from './lib.mjs'
-import * as manual from './sources/manual.mjs'
-import * as pcx from './sources/pcx.mjs'
-
-/** Enabled sources. Árukereső / Árgép only once they give permission. */
-const SOURCES = [manual, pcx]
+import { SOURCES } from './sources/index.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const dateArg = process.argv.indexOf('--date')
 const today = dateArg > 0 ? process.argv[dateArg + 1] : new Date().toISOString().slice(0, 10)
+const dirArg = process.argv.indexOf('--offers-dir')
+const offersDir = dirArg > 0 ? path.resolve(process.argv[dirArg + 1]) : undefined
 
 const readJson = (file, fallback) => (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : fallback)
 
@@ -56,14 +57,32 @@ function useOffers(sourceName, offers) {
   console.log(`${sourceName}: ${offers.length} ajánlat, ${ok} párosítva, ${unmatched} nem párosítható, ${invalid} érvénytelen`)
 }
 
-for (const source of SOURCES) {
-  try {
-    useOffers(source.name, await source.fetchOffers({ root, today, identifiers }))
-  } catch (e) {
-    failures.push(source.name)
-    console.error(`${source.name}: HIBA – ${e instanceof Error ? e.message : e}`)
-    // a source may still hand back what it collected before the problem
-    if (Array.isArray(e?.partialOffers) && e.partialOffers.length) useOffers(`${source.name} (részleges)`, e.partialOffers)
+if (offersDir) {
+  // offers collected by the per-shop jobs; a missing file = that job did not finish
+  for (const name of Object.keys(SOURCES)) {
+    const file = path.join(offersDir, `${name}.json`)
+    const r = readJson(file, null)
+    if (!r) {
+      failures.push(name)
+      console.error(`${name}: nincs ajánlatfájl (${file})`)
+      continue
+    }
+    if (!r.ok) {
+      failures.push(name)
+      console.error(`${name}: HIBA – ${r.error}`)
+    }
+    useOffers(r.ok ? name : `${name} (részleges)`, r.offers ?? [])
+  }
+} else {
+  for (const source of Object.values(SOURCES)) {
+    try {
+      useOffers(source.name, await source.fetchOffers({ root, today, identifiers }))
+    } catch (e) {
+      failures.push(source.name)
+      console.error(`${source.name}: HIBA – ${e instanceof Error ? e.message : e}`)
+      // a source may still hand back what it collected before the problem
+      if (Array.isArray(e?.partialOffers) && e.partialOffers.length) useOffers(`${source.name} (részleges)`, e.partialOffers)
+    }
   }
 }
 

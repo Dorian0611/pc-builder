@@ -2,7 +2,7 @@ name: Update prices
 
 on:
   schedule:
-    - cron: '30 1 * * *' # every night, 01:30 UTC (02:30 / 03:30 Budapest)
+    - cron: '30 1 1,15 * *' # twice a month: the 1st and 15th, 01:30 UTC (02:30 / 03:30 Budapest)
   workflow_dispatch:
 
 permissions:
@@ -14,27 +14,61 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  update:
+  # One job per shop, in parallel, each with its own 6-hour limit.
+  collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 200
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [manual, pcx, ipon, emag]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-
-      # A failing source fails this step → GitHub e-mails the repo owner.
-      # `if: always()` below still commits whatever the other sources delivered.
-      - name: Collect prices
-        id: collect
-        run: node scripts/prices/update-prices.mjs
+      - name: Collect ${{ matrix.source }}
+        run: node scripts/prices/collect.mjs --source ${{ matrix.source }} --out offers/${{ matrix.source }}.json
         env:
-          # Off switch without a code change: Settings → Secrets and variables → Actions → Variables
+          # Off switches without a code change: Settings → Secrets and variables → Actions → Variables
           PCX_DISABLED: ${{ vars.PCX_DISABLED }}
+          IPON_DISABLED: ${{ vars.IPON_DISABLED }}
+          EMAG_DISABLED: ${{ vars.EMAG_DISABLED }}
+      # also after a failure: collect.mjs writes whatever it got before the problem
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: offers-${{ matrix.source }}
+          path: offers/${{ matrix.source }}.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Merge all shops' offers into prices.json, commit, deploy.
+  aggregate:
+    needs: collect
+    if: always() && needs.collect.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: offers-*
+          path: offers
+          merge-multiple: true
+
+      # A failed or missing shop fails this step → GitHub e-mails the repo owner.
+      # `if: always()` below still commits what the other shops delivered.
+      - name: Compute prices
+        id: compute
+        run: node scripts/prices/update-prices.mjs --offers-dir offers
 
       - name: Commit changes
         id: commit
-        if: always() && steps.collect.outcome != 'cancelled'
+        if: always() && steps.compute.outcome != 'cancelled'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
