@@ -29,9 +29,30 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 class Blocked extends Error {}
 
+const REQUEST_TIMEOUT_MS = 30_000
+const NETWORK_RETRIES = 3
+
+/**
+ * GET with timeout and retries. Network errors (reset, timeout, DNS) are retried
+ * with a growing pause; if they persist, returns { status: 0, body: null } so the
+ * caller can skip that page instead of losing the whole run.
+ */
 async function get(url, { binary = false } = {}) {
   for (let attempt = 1; ; attempt++) {
-    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: binary ? '*/*' : 'text/html,application/xml' } })
+    let res
+    try {
+      res = await fetch(url, {
+        headers: { 'User-Agent': USER_AGENT, Accept: binary ? '*/*' : 'text/html,application/xml' },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      })
+    } catch (e) {
+      if (attempt >= NETWORK_RETRIES) {
+        const code = e?.cause?.code ?? e?.name ?? 'network error'
+        return { status: 0, body: null, error: String(code) }
+      }
+      await sleep(15_000 * attempt)
+      continue
+    }
     if (res.status === 403 || res.status === 429) {
       if (attempt >= 2) throw new Blocked(`${res.status} for ${url} – PCX is refusing us, stopping`)
       await sleep(60_000) // back off once, then give up
@@ -180,6 +201,8 @@ export async function fetchOffers({ identifiers, log = console.log, dryRun = fal
   let fetched = 0
   let mismatched = 0
   let outOfStock = 0
+  let networkErrors = 0
+  let consecutiveErrors = 0
   for (const [url, { partId }] of candidates) {
     if (fetched >= MAX_PAGES || Date.now() - started > TIME_BUDGET_MS) {
       log(`pcx: stopping early at ${fetched} pages (limit reached)`)
@@ -187,7 +210,19 @@ export async function fetchOffers({ identifiers, log = console.log, dryRun = fal
     }
     await sleep(DELAY_MS)
     fetched++
-    const { body } = await get(url)
+    const { body, error } = await get(url)
+    if (error) {
+      networkErrors++
+      consecutiveErrors++
+      log(`pcx: network error (${error}) on ${url}`)
+      // the site is probably down or dropping us: keep what we have, don't hammer it
+      if (consecutiveErrors >= 10) {
+        log('pcx: 10 network errors in a row, stopping early')
+        break
+      }
+      continue
+    }
+    consecutiveErrors = 0
     if (!body) continue
     const p = parseProductPage(body)
     if (!p || p.currency !== 'HUF' || !Number.isFinite(p.priceHuf)) continue
@@ -203,6 +238,12 @@ export async function fetchOffers({ identifiers, log = console.log, dryRun = fal
     }
     offers.push({ source: name, shop: 'PCX', priceHuf: p.priceHuf, partId, url })
   }
-  log(`pcx: ${fetched} pages fetched, ${offers.length} prices, ${outOfStock} out of stock, ${mismatched} part-number mismatches, ${Math.round((Date.now() - started) / 60000)} min`)
+  log(`pcx: ${fetched} pages fetched, ${offers.length} prices, ${outOfStock} out of stock, ${mismatched} part-number mismatches, ${networkErrors} network errors, ${Math.round((Date.now() - started) / 60000)} min`)
+  // Many failures = something is wrong: return the prices we got, but let the run fail (→ e-mail).
+  if (networkErrors > Math.max(20, fetched * 0.1)) {
+    const err = new Error(`${networkErrors} network errors out of ${fetched} pages`)
+    err.partialOffers = offers
+    throw err
+  }
   return offers
 }

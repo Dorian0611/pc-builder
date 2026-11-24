@@ -35,29 +35,35 @@ const index = buildIndex(identifiers)
 
 const failures = []
 const matched = []
+
+function useOffers(sourceName, offers) {
+  let ok = 0
+  let unmatched = 0
+  let invalid = 0
+  for (const offer of offers) {
+    if (!isValidOffer(offer)) {
+      invalid++
+      continue
+    }
+    const partId = matchOffer(index, offer)
+    if (!partId) {
+      unmatched++
+      continue
+    }
+    matched.push({ partId, offer })
+    ok++
+  }
+  console.log(`${sourceName}: ${offers.length} ajánlat, ${ok} párosítva, ${unmatched} nem párosítható, ${invalid} érvénytelen`)
+}
+
 for (const source of SOURCES) {
   try {
-    const offers = await source.fetchOffers({ root, today, identifiers })
-    let ok = 0
-    let unmatched = 0
-    let invalid = 0
-    for (const offer of offers) {
-      if (!isValidOffer(offer)) {
-        invalid++
-        continue
-      }
-      const partId = matchOffer(index, offer)
-      if (!partId) {
-        unmatched++
-        continue
-      }
-      matched.push({ partId, offer })
-      ok++
-    }
-    console.log(`${source.name}: ${offers.length} ajánlat, ${ok} párosítva, ${unmatched} nem párosítható, ${invalid} érvénytelen`)
+    useOffers(source.name, await source.fetchOffers({ root, today, identifiers }))
   } catch (e) {
     failures.push(source.name)
     console.error(`${source.name}: HIBA – ${e instanceof Error ? e.message : e}`)
+    // a source may still hand back what it collected before the problem
+    if (Array.isArray(e?.partialOffers) && e.partialOffers.length) useOffers(`${source.name} (részleges)`, e.partialOffers)
   }
 }
 
