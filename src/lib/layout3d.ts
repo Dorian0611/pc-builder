@@ -78,8 +78,53 @@ function caseBox(b: ResolvedBuild): Vec3 {
   return box
 }
 
+/** Bounding boxes of two items intersect (touching within `gap` mm doesn't count). */
+export function overlaps(a: Item, b: Item, gap = 2): boolean {
+  return [0, 1, 2].every((k) => Math.abs(a.pos[k] - b.pos[k]) < (a.size[k] + b.size[k]) / 2 - gap)
+}
+
+const DRIVES: ItemKind[] = ['hdd', 'ssd']
+
+/**
+ * Which way the box has to grow so two items stop overlapping, or null if the pair is
+ * not one that more room can fix. The generic interior puts the PSU at the bottom rear,
+ * the drives at the bottom front and the GPU above the PSU, so in small cases with long
+ * parts: GPU over PSU or a drive → taller; PSU against a drive → deeper.
+ */
+function growthFor(a: Item, b: Item): 1 | 2 | null {
+  const has = (k: ItemKind | ItemKind[]) => [a.kind, b.kind].some((x) => ([] as ItemKind[]).concat(k).includes(x))
+  if (has('gpu') && (has('psu') || has(DRIVES))) return 1
+  if (has('psu') && has(DRIVES)) return 2
+  return null
+}
+
+const GROW_STEP_MM = 10
+const MAX_GROW_STEPS = 40
+
+/**
+ * Positions the build's parts. The interior starts from the case's size class and limits
+ * (caseBox) and is enlarged step by step until no big parts overlap – the model is a
+ * generic layout, not the case's real one, so it makes room rather than draw parts
+ * through each other.
+ */
 export function layoutBuild(b: ResolvedBuild, levels: Map<string, CheckLevel> = new Map()): Layout {
-  const box = caseBox(b)
+  let box = caseBox(b)
+  for (let step = 0; ; step++) {
+    const layout = layoutIn(b, levels, box)
+    if (step >= MAX_GROW_STEPS) return layout
+    const grow: Vec3 = [0, 0, 0]
+    const big = layout.items.filter((i) => ['gpu', 'psu', ...DRIVES].includes(i.kind))
+    for (let i = 0; i < big.length; i++)
+      for (let j = i + 1; j < big.length; j++) {
+        const axis = growthFor(big[i], big[j])
+        if (axis !== null && overlaps(big[i], big[j])) grow[axis] = GROW_STEP_MM
+      }
+    if (!grow[1] && !grow[2]) return layout
+    box = [box[0], box[1] + grow[1], box[2] + grow[2]]
+  }
+}
+
+function layoutIn(b: ResolvedBuild, levels: Map<string, CheckLevel>, box: Vec3): Layout {
   const [W, H, D] = box
   const items: Item[] = []
   const err = (p?: Part) => !!p && levels.get(p.id) === 'error'

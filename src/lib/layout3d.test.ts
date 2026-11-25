@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { fixtureCatalog } from '../test/fixtureCatalog'
-import { layoutBuild } from './layout3d'
+import { layoutBuild, overlaps } from './layout3d'
 import type { BuildSelection } from './types'
 
 const build = (sel: BuildSelection) => fixtureCatalog.resolveBuild(sel)
@@ -44,6 +44,32 @@ describe('layoutBuild', () => {
     expect(rad.size[2]).toBe(360)
     expect(rad.fanSize).toBe(120)
     expect(kinds({ cooler: ['cool-arctic-lf3-360'] })).toEqual(['aio-pump', 'aio-radiator'])
+  })
+
+  it('a small case makes room so big parts do not overlap', () => {
+    const sel = {
+      case: ['case-cm-nr200p'],
+      motherboard: ['mb-asus-b650e-i'],
+      gpu: ['gpu-asus-5070ti-tuf'],
+      psu: ['psu-msi-a1000gl'],
+      storage: ['hdd-sea-barracuda-2tb', 'ssd-cru-mx500-1tb', 'hdd-sea-barracuda-2tb'],
+    }
+    const l = layoutBuild(build(sel))
+    const big = l.items.filter((i) => ['gpu', 'psu', 'hdd', 'ssd'].includes(i.kind))
+    expect(big).toHaveLength(5)
+    for (const a of big) for (const b of big) if (a !== b) expect(overlaps(a, b), `${a.key} / ${b.key}`).toBe(false)
+    // …and everything stays inside the (enlarged) box
+    const [W, H, D] = l.box
+    for (const i of l.items) {
+      expect(Math.abs(i.pos[0]) + i.size[0] / 2).toBeLessThanOrEqual(W / 2 + 1)
+      expect(i.pos[1] + i.size[1] / 2).toBeLessThanOrEqual(H + 1)
+      expect(Math.abs(i.pos[2]) + i.size[2] / 2).toBeLessThanOrEqual(D / 2 + 1)
+    }
+  })
+
+  it('a roomy case is not enlarged', () => {
+    const sel = { case: ['case-cor-3000d'], gpu: ['gpu-msi-4060-ventus2x'], psu: ['psu-cor-rm750e'], storage: ['hdd-sea-barracuda-2tb'] }
+    expect(layoutBuild(build(sel)).box[1]).toBe(layoutBuild(build({ case: ['case-cor-3000d'] })).box[1])
   })
 
   it('the case grows to fit its own GPU limit', () => {
