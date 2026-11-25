@@ -36,6 +36,8 @@ export async function get(url, { accept = 'text/html,application/xml' } = {}) {
       await sleep(60_000)
       continue
     }
+    // 511: eMAG-style bot block. Not retried, not worked around.
+    if (res.status === 511) throw new Blocked(`511 for ${url} – the site blocks bots, stopping`)
     if (res.status >= 500 && attempt < NETWORK_RETRIES) {
       await sleep(10_000 * attempt)
       continue
@@ -43,8 +45,21 @@ export async function get(url, { accept = 'text/html,application/xml' } = {}) {
     if (!res.ok) return { status: res.status, body: null, url: res.url }
     const buf = Buffer.from(await res.arrayBuffer())
     const gz = buf[0] === 0x1f && buf[1] === 0x8b
-    return { status: res.status, body: (gz ? zlib.gunzipSync(buf) : buf).toString('utf8'), url: res.url }
+    const body = (gz ? zlib.gunzipSync(buf) : buf).toString('utf8')
+    // A CAPTCHA / "checking your browser" page means the site does not want bots: stop, never solve it.
+    if (isChallengePage(body)) throw new Blocked(`${url} answered with a CAPTCHA / bot check – the site does not allow bots, stopping`)
+    return { status: res.status, body, url: res.url }
   }
+}
+
+/** CAPTCHA or bot-check interstitial instead of real content. */
+export function isChallengePage(html) {
+  const head = html.slice(0, 6000)
+  const title = head.match(/<title[^>]*>([^<]*)/i)?.[1] ?? ''
+  return (
+    /captcha|just a moment|attention required|are you a robot|access denied|bot check|ellenőrzés folyamatban/i.test(title) ||
+    /cf-chl-|challenge-platform|g-recaptcha|hcaptcha.com|captcha-delivery/i.test(head)
+  )
 }
 
 /**

@@ -7,7 +7,7 @@ on:
     inputs:
       sources:
         description: 'Shops to run, as a JSON list'
-        default: '["manual","pcx","ipon","emag"]'
+        default: '["manual","pcx"]'
       max_pages:
         description: 'Max product/listing pages per shop (empty = no limit) – for quick tests'
         default: ''
@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        source: ${{ fromJSON(inputs.sources || '["manual","pcx","ipon","emag"]') }}
+        source: ${{ fromJSON(inputs.sources || '["manual","pcx"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -44,8 +44,6 @@ jobs:
           MAX_PAGES: ${{ inputs.max_pages }}
           # Off switches without a code change: Settings → Secrets and variables → Actions → Variables
           PCX_DISABLED: ${{ vars.PCX_DISABLED }}
-          IPON_DISABLED: ${{ vars.IPON_DISABLED }}
-          EMAG_DISABLED: ${{ vars.EMAG_DISABLED }}
       # also after a failure: collect.mjs writes whatever it got before the problem
       - uses: actions/upload-artifact@v7
         if: always()

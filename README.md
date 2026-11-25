@@ -32,14 +32,16 @@ merges them:
 1. each source in `scripts/prices/sources/index.mjs` returns shop offers:
    - `manual` – `data/offers/manual.csv`;
    - `pcx` – walks the ~130-page component listing; part number from the product name or URL;
-   - `ipon`, `emag` – generic sitemap → product page → schema.org JSON-LD source
-     (`sources/sitemap-shop.mjs`): only pages whose URL contains a known part number are fetched,
-     and an offer counts only if the page's own MPN/EAN belongs to that part.
+   - `sources/sitemap-shop.mjs` – generic sitemap → product page → schema.org JSON-LD source for
+     further shops: only pages whose URL contains a known part number are fetched, and an offer
+     counts only if the page's own MPN/EAN belongs to that part.
 
-   Shops are included only if robots.txt allows it and they serve the bot without a challenge
-   (Aqua, Alza: refused; MediaMarkt: prices only via JavaScript). Every request identifies itself
-   (`pc-builder-price-bot`), one at a time with a 3 s pause. Off switch per shop: repository
-   variable `PCX_DISABLED` / `IPON_DISABLED` / `EMAG_DISABLED` = `1`;
+   Rule: a shop is collected only if robots.txt allows it and it serves the identified bot
+   (`pc-builder-price-bot`) from GitHub Actions without a CAPTCHA, bot check or block; such checks
+   stop the source (`http.mjs`) and are never worked around. Checked and not included: iPon
+   (CAPTCHA), eMAG (HTTP 511), Aqua and Alza (403), MediaMarkt (prices only via JavaScript),
+   Euronics (empty sitemap). One request at a time with a 3 s pause. Off switch: repository
+   variable `PCX_DISABLED` = `1`;
 2. offers are matched to parts by EAN or manufacturer part number (`data/part-identifiers.json`,
    written by the OpenDB importer); identifiers shared by several parts are ignored;
 3. per part: median price, lowest price, number of distinct shops → `public/data/prices.json`;

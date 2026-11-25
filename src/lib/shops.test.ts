@@ -49,3 +49,12 @@ describe('pageConfirmsPart', () => {
     expect(pageConfirmsPart(identifiers, 'cpu', null)).toBe(false)
   })
 })
+
+describe('isChallengePage', () => {
+  it('recognises CAPTCHA and bot-check pages', async () => {
+    const { isChallengePage } = await import('../../scripts/prices/http.mjs')
+    expect(isChallengePage('<html><head><title>Captcha</title></head><body></body></html>')).toBe(true)
+    expect(isChallengePage('<title>Just a moment...</title><script src="/cdn-cgi/challenge-platform/x.js"></script>')).toBe(true)
+    expect(isChallengePage('<title>NOCTUA NH-U9DX i4 - iPon.hu</title><script type="application/ld+json">{}</script>')).toBe(false)
+  })
+})
