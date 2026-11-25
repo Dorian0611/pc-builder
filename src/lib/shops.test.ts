@@ -28,7 +28,13 @@ describe('parseProductJsonLd', () => {
         offers: { '@type': 'Offer', price: 59990, priceCurrency: 'HUF', availability: 'https://schema.org/InStock' },
       }),
     )
-    expect(p).toEqual({ name: 'AMD Ryzen 7 5700X', mpn: '100-000000926', gtin: '5996409540061', priceHuf: 59990, currency: 'HUF', inStock: true })
+    expect(p).toEqual({ condition: '', isNew: true, name: 'AMD Ryzen 7 5700X', mpn: '100-000000926', gtin: '5996409540061', priceHuf: 59990, currency: 'HUF', inStock: true })
+  })
+  it('marks used and refurbished offers', () => {
+    const p = parseProductJsonLd(
+      `<script type="application/ld+json">${JSON.stringify({ '@type': 'Product', mpn: 'X1', offers: { price: 1000, priceCurrency: 'HUF', itemCondition: 'https://schema.org/RefurbishedCondition' } })}</script>`,
+    )
+    expect(p).toMatchObject({ condition: 'RefurbishedCondition', isNew: false })
   })
   it('handles offers as an array and string prices', () => {
     const p = parseProductJsonLd(

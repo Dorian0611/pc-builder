@@ -116,7 +116,11 @@ export function parseProductJsonLd(html) {
       if (!offer) continue
       const price = Number(offer.price ?? offer.lowPrice)
       const gtin = node.gtin13 ?? node.gtin ?? node.gtin14 ?? node.gtin12 ?? node.ean
+      const condition = String(offer.itemCondition ?? node.itemCondition ?? '').replace(/^https?:\/\/schema\.org\//, '')
       return {
+        /** "" when the page doesn't say; "UsedCondition" / "RefurbishedCondition" are not new products */
+        condition,
+        isNew: !/Used|Refurbished|Damaged/i.test(condition),
         name: node.name ? String(node.name) : undefined,
         mpn: node.mpn ? String(node.mpn) : undefined,
         gtin: gtin ? String(gtin) : undefined,

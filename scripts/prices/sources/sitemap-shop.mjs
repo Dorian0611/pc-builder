@@ -122,6 +122,8 @@ export function createSitemapSource(cfg) {
         continue
       }
       if (!pageConfirmsPart(identifiers, partId, page)) continue
+      // used / refurbished / outlet items would drag the median down
+      if (!page.isNew) continue
       confirmed++
       if (!page.inStock) {
         outOfStock++

@@ -11,9 +11,14 @@
 //   Alza   – 403 to the bot
 //   MediaMarkt – prices only via JavaScript, not in the HTML
 //   Euronics   – empty sitemap, few PC parts
-//   Árukereső / Árgép – only with their permission (and Cloudflare bot check)
+//   Árukereső / Árgép directly – Cloudflare bot check
+//
+// Exception chosen by the project owner (2026-11-25): Árukereső / Árgép prices through the Apify
+// actor "zinc_grill/arukereso-argep-scraper" (sources/arukereso.mjs), which gets past the sites'
+// bot protection itself. Only for the product URLs listed in data/arukereso-urls.csv.
 // New shops that pass the rule can use sources/sitemap-shop.mjs (sitemap → JSON-LD).
 import * as manual from './manual.mjs'
 import * as pcx from './pcx.mjs'
+import * as arukereso from './arukereso.mjs'
 
-export const SOURCES = { manual, pcx }
+export const SOURCES = { manual, pcx, arukereso }

@@ -1,0 +1,8 @@
+# Árukereső / Árgép product pages for the Apify price source (scripts/prices/sources/arukereso.mjs).
+# One line per part: partId = OpenDB id (see public/data/*.json), url = the product page, note = free text.
+# The actor cannot search, so only parts listed here get Árukereső prices. Cost ~$1 per 1,000 pages.
+partId,url,note
+7ab840c3-8c52-4ced-a65c-7b0922ca479e,https://www.arukereso.hu/processzor-c3139/amd/ryzen-7-9800x3d-box-100-100001084wof-p1154611732/,AMD Ryzen 7 9800X3D
+4dcfffec-423b-4052-8aca-db6c0f84bb43,https://www.arukereso.hu/processzor-c3139/amd/ryzen-7-7800x3d-8-core-4-2ghz-am5-box-100-100000910wof-p948235329/,AMD Ryzen 7 7800X3D
+d17da031-a70f-4dce-91bf-1b29d8aca3a8,https://www.arukereso.hu/processzor-c3139/amd/ryzen-7-7800x3d-8-core-4-2ghz-am5-tray-100-000000910-p954096393/,AMD Ryzen 7 7800X3D OEM/Tray
+6b03b443-7b22-491c-b301-7e2a285359df,https://www.arukereso.hu/processzor-c3139/amd/ryzen-5-7600-6-core-3-8ghz-am5-box-100-100001015box-p910142241/,AMD Ryzen 5 7600

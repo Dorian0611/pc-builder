@@ -32,6 +32,11 @@ merges them:
 1. each source in `scripts/prices/sources/index.mjs` returns shop offers:
    - `manual` – `data/offers/manual.csv`;
    - `pcx` – walks the ~130-page component listing; part number from the product name or URL;
+   - `arukereso` – Árukereső / Árgép product pages listed in `data/arukereso-urls.csv`
+     (`partId,url,note`), scraped by the Apify actor `zinc_grill/arukereso-argep-scraper`
+     (needs the `APIFY_TOKEN` secret, ~$1 per 1,000 pages, cap `ARUKERESO_MAX_URLS`, default 500).
+     Every shop offer on the page counts. This actor gets past the sites' bot protection itself;
+     it is an explicit exception to the rule below, chosen by the project owner;
    - `sources/sitemap-shop.mjs` – generic sitemap → product page → schema.org JSON-LD source for
      further shops: only pages whose URL contains a known part number are fetched, and an offer
      counts only if the page's own MPN/EAN belongs to that part.

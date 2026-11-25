@@ -71,7 +71,17 @@ export function median(values) {
   return s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2)
 }
 
-const shopKey = (shop) => String(shop).toLowerCase().replace(/[^a-z0-9áéíóöőúüű]/g, '')
+/**
+ * Same shop however a source spells it: "PCX", "pcx.hu", "PCX Kft." → "pcx".
+ * Exported for the tests.
+ */
+export const shopKey = (shop) =>
+  String(shop)
+    .toLowerCase()
+    .replace(/[\s,]+(kft|zrt|bt|nyrt|kkt)\.?\s*$/, '')
+    .replace(/\.(hu|com|eu|net)\b/g, '')
+    .replace(/(webáruház|webaruhaz|webshop)/g, '')
+    .replace(/[^a-z0-9áéíóöőúüű]/g, '')
 
 /**
  * Groups matched offers by part and computes the price block.
