@@ -7,7 +7,7 @@ export const { name, fetchOffers, foreign } = createSitemapSource({
   name: 'megekko',
   shop: 'Megekko',
   base: 'https://www.megekko.nl',
-  sitemap: 'https://www.megekko.nl/sitemap.xml',
+  sitemap: 'https://www.megekko.nl/sitemap/sitemap_index.xml',
   // any page URL: the part number must match in the URL and again on the page itself
   productUrl: /^https:\/\/www\.megekko\.nl\//,
   foreign: { country: 'NL', currency: 'EUR' },
