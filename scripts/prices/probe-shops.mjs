@@ -53,6 +53,7 @@ async function probe(domain) {
     const sm = queue.shift()
     await sleep(DELAY)
     const res = await fetchText(sm)
+    row.sitemapFiles = [...(row.sitemapFiles ?? []), `${sm} → HTTP ${res.status}${res.url && res.url !== sm ? ` (${res.url})` : ''}`]
     sitemapsRead++
     if (res.blocked) return say('❌ blocks the bot on the sitemap')
     if (!res.body) continue
@@ -113,6 +114,7 @@ for (const d of domains) {
   const r = await probe(d)
   rows.push(r)
   console.log(`\n${r.verdict}  ${r.shop}\n  robots: ${r.robots} | home: ${r.home} | sitemap: ${r.sitemap}\n  pages: ${r.pages}`)
+  for (const f of r.sitemapFiles ?? []) console.log(`    sitemap ${f}`)
   for (const e of r.examples ?? []) console.log(`    e.g. ${e}`)
 }
 console.log('\nSUMMARY')
