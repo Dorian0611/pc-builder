@@ -6,7 +6,7 @@
 
 import { candidateErrors } from './builder'
 import type { Catalog } from './catalog'
-import { estimatePower } from './compat'
+import { checkBuild, estimatePower } from './compat'
 import { effectivePrice } from './estimates'
 import type { BuildSelection, Category, Cpu, Gpu, Part, ResolvedBuild } from './types'
 
@@ -81,6 +81,8 @@ export interface Suggestion {
   needsPsu: boolean
   /** after the swap, which part limits performance */
   limitedBy?: Limiter
+  /** combined upgrade: this part is swapped together with `part` (priceHuf is the total) */
+  with?: Part
 }
 
 const PSU_RULES = new Set(['psu-wattage', 'psu-connectors'])
@@ -139,6 +141,8 @@ export interface Advice {
   balance: Balance
   gpu: Suggestion[]
   cpu: Suggestion[]
+  /** processor + graphics card together (only when clearly better than either alone) */
+  combo: Suggestion[]
   /** a faster CPU than the current one fits this board at all (gain aside) */
   fasterCpuFits: boolean
   /** simple fixes that are not about frames: too little RAM, no SSD, weak PSU */
@@ -153,24 +157,31 @@ export function adviseUpgrades(catalog: Catalog, sel: BuildSelection, budgetHuf?
   const bal = balance(b, model)
   const affordable = (s: { price: number }) => budgetHuf === undefined || s.price <= budgetHuf
 
+  // the parts that fit the rest of the build at all (any price)
+  const gpuFit =
+    b.gpu?.perfScore !== undefined || !b.gpu
+      ? fitting(catalog, sel, catalog.data.gpu.filter((g: Gpu) => g.perfScore !== undefined && g.id !== b.gpu?.id))
+      : []
+  const cpuFit =
+    b.cpu?.perfScore !== undefined ? fitting(catalog, sel, catalog.data.cpu.filter((x: Cpu) => x.perfScore !== undefined && x.id !== b.cpu!.id)) : []
+
   // ---- graphics card
   const gpuNow = bal.gaming
   const gpuCands: Suggestion[] = []
-  if (b.gpu?.perfScore !== undefined || !b.gpu)
-    for (const c of fitting(catalog, sel, catalog.data.gpu.filter((g: Gpu) => g.perfScore !== undefined && g.id !== b.gpu?.id))) {
-      if (!affordable(c)) continue
-      const after = model.score(bal.cpu, c.part.perfScore)!
-      const gain = gpuNow ? after / gpuNow - 1 : null
-      if (gain !== null && gain < MIN_GAIN) continue
-      const limitedBy = bal.cpu !== undefined ? model.limiter(bal.cpu, c.part.perfScore!) : undefined
-      gpuCands.push({ part: c.part, priceHuf: c.price, gain, score: after, needsPsu: c.needsPsu, limitedBy })
-    }
+  for (const c of gpuFit) {
+    if (!affordable(c)) continue
+    const after = model.score(bal.cpu, c.part.perfScore)!
+    const gain = gpuNow ? after / gpuNow - 1 : null
+    if (gain !== null && gain < MIN_GAIN) continue
+    const limitedBy = bal.cpu !== undefined ? model.limiter(bal.cpu, c.part.perfScore!) : undefined
+    gpuCands.push({ part: c.part, priceHuf: c.price, gain, score: after, needsPsu: c.needsPsu, limitedBy })
+  }
 
   // ---- processor (on the current board: same socket, memory type…)
   const cpuCands: Suggestion[] = []
   let fasterCpuFits = false
   if (b.cpu?.perfScore !== undefined)
-    for (const c of fitting(catalog, sel, catalog.data.cpu.filter((x: Cpu) => x.perfScore !== undefined && x.id !== b.cpu!.id))) {
+    for (const c of cpuFit) {
       if (c.part.perfScore! > b.cpu.perfScore * (1 + MIN_GAIN)) fasterCpuFits = true
       if (!affordable(c)) continue
       // without a graphics card the CPU's own speed is what counts
@@ -180,6 +191,11 @@ export function adviseUpgrades(catalog: Catalog, sel: BuildSelection, budgetHuf?
       if (gain === null || gain < MIN_GAIN) continue
       cpuCands.push({ part: c.part, priceHuf: c.price, gain, score: after!, needsPsu: c.needsPsu })
     }
+
+  // ---- processor + graphics card together
+  const gpuPick = pickSpread(frontier(gpuCands))
+  const cpuPick = pickSpread(frontier(cpuCands))
+  const combo = combos(catalog, sel, model, bal, cpuFit, gpuFit, budgetHuf, Math.max(0, ...gpuPick.map((s) => s.score), ...cpuPick.map((s) => s.score)))
 
   // ---- other fixes
   const other: Advice['other'] = []
@@ -215,9 +231,65 @@ export function adviseUpgrades(catalog: Catalog, sel: BuildSelection, budgetHuf?
 
   return {
     balance: bal,
-    gpu: pickSpread(frontier(gpuCands)),
-    cpu: pickSpread(frontier(cpuCands)),
+    gpu: gpuPick,
+    cpu: cpuPick,
+    combo,
     fasterCpuFits,
     other,
   }
+}
+
+type Fit<T extends Part> = { part: T; needsPsu: boolean; price: number }
+
+/** Only the parts that beat every cheaper one on their own score – the rest can't be in a best pair. */
+function partFrontier<T extends Cpu | Gpu>(list: Fit<T>[], above: number): Fit<T>[] {
+  const sorted = list.filter((c) => c.part.perfScore! > above).sort((a, b) => a.price - b.price)
+  const out: Fit<T>[] = []
+  let best = -Infinity
+  for (const c of sorted)
+    if (c.part.perfScore! > best) {
+      out.push(c)
+      best = c.part.perfScore!
+    }
+  return out
+}
+
+/**
+ * Processor and graphics card swapped together, when the pair clearly beats the best
+ * single swap (`bestSingle`): typically an old CPU with an old GPU, where either alone
+ * soon runs into the other. Checked together for compatibility and the PSU.
+ */
+function combos(
+  catalog: Catalog,
+  sel: BuildSelection,
+  model: PerfModel,
+  bal: Balance,
+  cpuFit: Fit<Cpu>[],
+  gpuFit: Fit<Gpu>[],
+  budgetHuf: number | undefined,
+  bestSingle: number,
+): Suggestion[] {
+  const now = bal.gaming
+  if (!now || bal.cpu === undefined || bal.gpu === undefined) return []
+  const cpus = partFrontier(cpuFit, bal.cpu * (1 + MIN_GAIN))
+  const gpus = partFrontier(gpuFit, bal.gpu * (1 + MIN_GAIN))
+  const floor = Math.max(now, bestSingle) * (1 + MIN_GAIN)
+  const pairs: Suggestion[] = []
+  for (const c of cpus)
+    for (const g of gpus) {
+      const price = c.price + g.price
+      if (budgetHuf !== undefined && price > budgetHuf) continue
+      const score = model.score(c.part.perfScore, g.part.perfScore)
+      if (score === undefined || score < floor) continue
+      pairs.push({ part: g.part, with: c.part, priceHuf: price, score, gain: score / now - 1, needsPsu: false })
+    }
+  // the together-check (PSU wattage for both, etc.) only for the few that are shown
+  const out: Suggestion[] = []
+  for (const s of pickSpread(frontier(pairs))) {
+    const both = withReplaced(withReplaced(sel, s.part), s.with!)
+    const errors = checkBuild(catalog.resolveBuild(both)).filter((e) => e.level === 'error')
+    if (errors.some((e) => !PSU_RULES.has(e.rule))) continue
+    out.push({ ...s, needsPsu: errors.length > 0 })
+  }
+  return out
 }

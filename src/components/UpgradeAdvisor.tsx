@@ -9,7 +9,8 @@ import type { BuildSelection, Part } from '../lib/types'
 interface Props {
   catalog: Catalog
   selection: BuildSelection
-  onApply: (part: Part) => void
+  /** one part, or a CPU + GPU pair swapped together */
+  onApply: (parts: Part[]) => void
 }
 
 const LIMITER_TEXT: Record<Limiter, string> = {
@@ -21,13 +22,21 @@ const LIMITER_TEXT: Record<Limiter, string> = {
 const pct = (g: number) => `+${Math.round(g * 100)}%`
 
 /** before → after: FPS in game mode, % gain otherwise */
-function Row({ s, before, fps, onApply }: { s: Suggestion; before?: number; fps: boolean; onApply: (p: Part) => void }) {
-  const estimated = !s.part.price
+function Row({ s, before, fps, onApply }: { s: Suggestion; before?: number; fps: boolean; onApply: (p: Part[]) => void }) {
+  const parts = s.with ? [s.with, s.part] : [s.part]
+  const estimated = parts.some((p) => !p.price)
   return (
     <li className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2">
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium" title={fullName(s.part)}>{fullName(s.part)}</div>
-        <div className="truncate text-xs text-slate-500">{specLine(s.part)}</div>
+        {parts.map((p, i) => (
+          <div key={p.id}>
+            <div className="truncate font-medium" title={fullName(p)}>
+              {i > 0 && <span className="text-slate-400">+ </span>}
+              {fullName(p)}
+            </div>
+            <div className="truncate text-xs text-slate-500">{specLine(p)}</div>
+          </div>
+        ))}
         {s.needsPsu && <div className="text-xs text-amber-700">Erősebb táp is kell hozzá.</div>}
       </div>
       {s.gain !== null && (
@@ -45,7 +54,7 @@ function Row({ s, before, fps, onApply }: { s: Suggestion; before?: number; fps:
         {estimated ? 'kb. ' : ''}
         {formatHuf(s.priceHuf)}
       </div>
-      <button onClick={() => onApply(s.part)} className="shrink-0 rounded-md border border-blue-600 px-2.5 py-1 text-sm font-medium text-blue-700 hover:bg-blue-50">
+      <button onClick={() => onApply(parts)} className="shrink-0 rounded-md border border-blue-600 px-2.5 py-1 text-sm font-medium text-blue-700 hover:bg-blue-50">
         Csere
       </button>
     </li>
@@ -223,6 +232,22 @@ export function UpgradeAdvisor({ catalog, selection, onApply }: Props) {
                   onApply={onApply}
                 />
               ) : null}
+              {advice.combo.length > 0 && (
+                <Group
+                  title="Processzor + videókártya együtt"
+                  list={advice.combo}
+                  before={bal?.gaming}
+                  fps={fpsMode}
+                  empty=""
+                  onApply={onApply}
+                />
+              )}
+              {advice.combo.length > 0 && (
+                <p className="-mt-3 text-xs text-slate-500">
+                  A két alkatrész itt egymást korlátozza, ezért együtt cserélve jóval többet hoznak, mint bármelyik külön. Az ár a kettő
+                  együtt.
+                </p>
+              )}
               {advice.other.length > 0 && (
                 <div>
                   <h3 className="mb-2 font-medium">Egyéb javaslatok</h3>
@@ -267,7 +292,7 @@ function Group({
   before?: number
   fps: boolean
   empty: string
-  onApply: (p: Part) => void
+  onApply: (p: Part[]) => void
 }) {
   return (
     <div>

@@ -244,7 +244,13 @@ function Builder({ catalog, meta }: { catalog: Catalog; meta: CatalogMeta }) {
       <UpgradeAdvisor
         catalog={catalog}
         selection={selection}
-        onApply={(part) => replaceSelection(withReplaced(selection, part), `Csere: ${fullName(part)}.`, 'Visszavonás')}
+        onApply={(parts) =>
+          replaceSelection(
+            parts.reduce(withReplaced, selection),
+            `Csere: ${parts.map(fullName).join(' + ')}.`,
+            'Visszavonás',
+          )
+        }
       />
 
       <Footer meta={meta} />

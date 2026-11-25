@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { fixtureCatalog } from '../test/fixtureCatalog'
 import { cpuPerfScore, gpuPerfScore } from '../../scripts/perf.mjs'
-import { adviseUpgrades, balance, CPU_CAP, frontier, gamingScore, pickSpread, withReplaced, type Suggestion } from './upgrade'
+import { adviseUpgrades, balance, CPU_CAP, frontier, gamingScore, pickSpread, withReplaced, type PerfModel, type Suggestion } from './upgrade'
 import type { BuildSelection, Part } from './types'
 
 const resolve = (sel: BuildSelection) => fixtureCatalog.resolveBuild(sel)
@@ -98,6 +98,39 @@ describe('adviseUpgrades', () => {
     const reasons = adviseUpgrades(fixtureCatalog, old).other.map((o) => o.suggestion.part.category)
     expect(reasons).toContain('memory')
     expect(reasons).toContain('storage')
+  })
+
+  it('suggests CPU + GPU together when both hold the build back', () => {
+    // AM4 Ryzen 5 5600 + RX 7600 in a heavy game: either swap alone soon hits the other
+    const am4 = {
+      cpu: ['cpu-r5-5600'],
+      motherboard: ['mb-msi-b550-tomahawk'],
+      gpu: ['gpu-asrock-7600-cl'],
+      psu: ['psu-msi-a1000gl'],
+    }
+    const model: PerfModel = { score: (c, g) => (g === undefined ? undefined : Math.min(g, (c ?? Infinity) * 1.3)), limiter: () => 'balanced' }
+    const a = adviseUpgrades(fixtureCatalog, am4, undefined, model)
+    expect(a.combo.length).toBeGreaterThan(0)
+    const best = Math.max(...a.gpu.map((s) => s.score), ...a.cpu.map((s) => s.score))
+    for (const s of a.combo) {
+      expect(s.with?.category).toBe('cpu')
+      expect(s.part.category).toBe('gpu')
+      expect(s.score).toBeGreaterThanOrEqual(best * 1.1)
+      expect(s.priceHuf).toBe((s.part.price?.medianHuf ?? 0) + (s.with!.price?.medianHuf ?? 0))
+      expect((s.with as { socket: string }).socket).toBe('AM4')
+    }
+  })
+
+  it('no combo when one swap already does the job', () => {
+    // fast CPU, slow GPU: a new GPU alone is the answer
+    const a = adviseUpgrades(fixtureCatalog, { ...old, cpu: ['cpu-r7-7800x3d'], psu: ['psu-msi-a1000gl'] })
+    expect(a.combo).toEqual([])
+  })
+
+  it('combos respect the budget as a total', () => {
+    const am4 = { cpu: ['cpu-r5-5600'], motherboard: ['mb-msi-b550-tomahawk'], gpu: ['gpu-asrock-7600-cl'], psu: ['psu-msi-a1000gl'] }
+    const model: PerfModel = { score: (c, g) => (g === undefined ? undefined : Math.min(g, (c ?? Infinity) * 1.3)), limiter: () => 'balanced' }
+    for (const s of adviseUpgrades(fixtureCatalog, am4, 250_000, model).combo) expect(s.priceHuf).toBeLessThanOrEqual(250_000)
   })
 
   it('a suggestion replaces the whole category', () => {
