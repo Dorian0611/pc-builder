@@ -17,10 +17,10 @@ export function Footer({ meta }: { meta: CatalogMeta }) {
       <p className="mt-2">
         Árak: a{' '}
         <a className="underline" href="https://www.pcx.hu" target="_blank" rel="noreferrer">PCX</a> webáruház
-        készleten lévő termékeinek ára, egyes népszerű alkatrészeknél az Árukereső / Árgép bolti ajánlataiból
-        számolt középső (medián) ár; havonta kétszer frissítve. A „becsült” árak hasonló
-        termékek bolti áraiból számolt tájékoztató értékek. További ajánlatok: „Árak az Árukeresőn” link. Az árak
-        tájékoztató jellegűek.
+        készleten lévő termékeinek ára, havonta kétszer frissítve. A „becsült” árak tájékoztató értékek: vagy
+        ugyanannak a terméknek külföldi (holland, brit) bolti árából – az EKB árfolyamán forintra váltva, magyar
+        áfával, a magyar árszinthez igazítva –, vagy hasonló termékek magyar bolti áraiból. További ajánlatok: „Árak
+        az Árukeresőn” link.
       </p>
     </footer>
   )

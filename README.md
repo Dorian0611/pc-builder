@@ -53,7 +53,15 @@ merges them:
 4. a part without fresh offers keeps its last price for up to 35 days; a median change over 40% is flagged;
 5. changed prices are appended to `data/price-history/YYYY-MM.csv`.
 
-Parts without a shop price get an **estimate** in the browser (`src/lib/estimates.ts`): the median
+**Foreign shops** (`megekko` NL, `overclockers` UK; sources with `foreign: {country, currency}`) never
+become real prices. Their offers are converted with the ECB daily rates to a Hungarian gross price
+(`fx.mjs`: net of the shop country's VAT, plus 27%) and written to `public/data/foreign-prices.json`
+with per-category calibration factors (median Hungarian/foreign ratio over parts that have both,
+`foreign.mjs`). Shops were chosen with `scripts/prices/probe-shops.mjs` run from GitHub Actions
+(`.github/workflows/probe-shops.yml`).
+
+Parts without a shop price get an **estimate** in the browser (`src/lib/estimates.ts`): first their
+own foreign median × the category factor, else the median
 of comparable priced parts (same GPU chip + VRAM, same CPU, same SSD size/interface, …), shown
 with its 25–75% range and always labelled as an estimate.
 
