@@ -121,6 +121,14 @@ export async function fetchOffers({ root, identifiers, log = console.log }) {
   const items = await api(`/datasets/${run.defaultDatasetId}/items?clean=true&format=json`, token)
   const offers = items.flatMap((it) => itemToOffers(it, urlToPart))
   const pages = new Set(items.map((it) => normalizeUrl(it.url)))
+  // the actor reports per-page failures in `error` (e.g. "Request blocked - received 403 status code")
+  const errors = items.filter((it) => it.error)
+  if (errors.length) log(`arukereso: ${errors.length} of ${items.length} pages failed in the actor, e.g. "${errors[0].error}"`)
+  if (items.length && errors.length === items.length) {
+    const err = new Error(`every page failed in the actor ("${errors[0].error}") – Árukereső/Árgép is blocking it`)
+    err.partialOffers = []
+    throw err
+  }
   if (items.length && !offers.length) {
     // the actor's output did not look as documented: show its shape so the mapping can be fixed
     log(`arukereso: no offers mapped – first item: ${JSON.stringify(items[0]).slice(0, 1500)}`)
