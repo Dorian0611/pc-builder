@@ -5,7 +5,9 @@ compatibility check, an estimated price in HUF and a power estimate. Builds can 
 as links (`#b=…`, part ids packed into the URL – no server) and saved by name in the browser.
 An upgrade advisor suggests what to replace in an existing build, based on our own rough
 performance scores (`scripts/perf.mjs`: CPU from architecture, clock, cores and cache; GPU from
-a per-chip table).
+a per-chip table). The FPS estimate covers Steam's most played games, refreshed twice a month
+from their store requirements (`scripts/games/`), plus hand-kept entries such as GTA VI
+(`data/games-manual.json`, marked as estimates).
 The user interface is in Hungarian.
 
 Live site: https://dorian0611.github.io/pc-builder/

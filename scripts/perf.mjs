@@ -8,6 +8,28 @@
 
 /** Gaming performance per GHz relative to Zen 4 (game workloads, not Cinebench). */
 export const CPU_ARCH_IPC = {
+  // older parts: only needed to read games' system requirements (not sold any more)
+  Bulldozer: 0.33,
+  Piledriver: 0.37,
+  Vishera: 0.37,
+  Steamroller: 0.42,
+  'Sandy Bridge': 0.52,
+  'Sandy Bridge EP': 0.52,
+  'Sandy Bridge-EP': 0.52,
+  'Ivy Bridge': 0.55,
+  'Ivy Bridge E': 0.55,
+  'Ivy Bridge EP': 0.55,
+  'Ivy Bridge-EP': 0.55,
+  'Ivy Bridge EN': 0.55,
+  Haswell: 0.62,
+  'Haswell Refresh': 0.62,
+  'Haswell E': 0.62,
+  'Haswell-E': 0.62,
+  Broadwell: 0.64,
+  'Broadwell E': 0.64,
+  'Broadwell-E': 0.64,
+  'Skylake-X': 0.66,
+  'Cascade Lake': 0.66,
   Excavator: 0.45,
   Zen: 0.62,
   'Zen+': 0.66,
@@ -51,7 +73,7 @@ export function cpuPerfScore(j) {
   const clock = j.clocks?.performance?.boost || j.clocks?.performance?.base
   if (!ipc || !(clock > 0)) return undefined
   // Intel hybrid: only the P-cores count; the E-cores add a little
-  const p = j.cores?.performance || j.cores?.total
+  const p = j.cores?.performance || effectiveCores(j)
   const e = j.cores?.efficiency || 0
   const threads = j.cores?.threads ?? p
   const pThreads = e ? threads - e : threads
@@ -59,6 +81,26 @@ export function cpuPerfScore(j) {
   // 3D V-Cache (96 MB+ L3 on Zen 3/4/5 desktop parts) helps games a lot
   if (/^Zen [345]$/.test(j.microarchitecture) && (j.cache?.l3 ?? 0) >= 96) score *= 1.2
   return round((score / REFERENCE) * 100)
+}
+
+/** AMD's FX "cores" are half-modules: count them as half for games. */
+export function effectiveCores(j) {
+  const total = j.cores?.total ?? 0
+  return /Bulldozer|Piledriver|Vishera|Steamroller|Excavator/.test(j.microarchitecture ?? '') ? Math.ceil(total / 2) : total
+}
+
+/**
+ * Lookup key for a CPU model name as games write it: "Intel® Core™ i5-4460" → "i5 4460",
+ * "AMD Ryzen 5 3600X" → "ryzen 5 3600x", "FX-8350" → "fx 8350", "Core Ultra 7 265K" → "ultra 7 265k".
+ */
+export function cpuNameKey(name) {
+  const t = String(name).toLowerCase().replace(/[™®©]/g, '').replace(/\((r|tm)\)/g, '')
+  let m
+  if ((m = t.match(/ultra\s*([3579])\s*(\d{3}[a-z]{0,2})\b/))) return `ultra ${m[1]} ${m[2]}`
+  if ((m = t.match(/\bi([3579])[\s-]*(\d{4,5}[a-z]{0,2})\b/))) return `i${m[1]} ${m[2]}`
+  if ((m = t.match(/ryzen\s*([3579])\s*(?:pro\s*)?(\d{4}[a-z0-9]{0,3})\b/))) return `ryzen ${m[1]} ${m[2]}`
+  if ((m = t.match(/\bfx[\s-]*(\d{4})\b/))) return `fx ${m[1]}`
+  return undefined
 }
 
 /** Relative gaming performance per chip (GeForce RTX 4060 = 100). */

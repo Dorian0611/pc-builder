@@ -28,7 +28,7 @@ describe('performance scores', () => {
   })
   it('no turbo → base clock; unknown architecture → no score', () => {
     expect(cpuPerfScore({ microarchitecture: 'Coffee Lake', clocks: { performance: { base: 3.7, boost: 0 } }, cores: { total: 2, threads: 2 } })).toBeGreaterThan(0)
-    expect(cpuPerfScore(cpu('Bulldozer', 4, 8, 8))).toBeUndefined()
+    expect(cpuPerfScore(cpu('NetBurst', 3.8, 1, 2))).toBeUndefined()
   })
   it('GPU table: RTX 4060 = 100, workstation cards have no score', () => {
     expect(gpuPerfScore('GeForce RTX 4060')).toBe(100)

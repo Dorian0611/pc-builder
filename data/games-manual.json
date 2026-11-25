@@ -1,0 +1,34 @@
+[
+  {
+    "id": "gta-6",
+    "name": "Grand Theft Auto VI",
+    "cpu": 80,
+    "gpu": 125,
+    "estimated": true,
+    "note": "PC-s verzió és hivatalos gépigény még nincs (2027 elejére várják); a szám a hasonló nyílt világú játékokból becsült, kb. Ryzen 5 5600 / Core i5-12400 és RTX 3070 / RX 6700 XT szint 1080p 60 FPS-hez.",
+    "cpuText": "becslés: Ryzen 5 5600 / Core i5-12400 szint",
+    "gpuText": "becslés: RTX 3070 / RX 6700 XT szint"
+  },
+  {
+    "id": "steam-730",
+    "steamAppId": 730,
+    "name": "Counter-Strike 2",
+    "cpu": 32,
+    "gpu": 24,
+    "estimated": true,
+    "note": "A hivatalos gépigény csak egy régi minimum; ez becslés. E-sport címnél a 144+ FPS a cél, ott a processzor is sokat számít.",
+    "cpuText": "becslés: 4 magos, kb. Core i5-4460 szint 60 FPS-hez",
+    "gpuText": "becslés: kb. GTX 1050 Ti szint 60 FPS-hez"
+  },
+  {
+    "id": "steam-570",
+    "steamAppId": 570,
+    "name": "Dota 2",
+    "cpu": 28,
+    "gpu": 18,
+    "estimated": true,
+    "note": "A hivatalos gépigény nagyon régi; ez becslés a mai kiadásra.",
+    "cpuText": "becslés: 4 magos, kb. Core i3-6100 szint 60 FPS-hez",
+    "gpuText": "becslés: kb. GTX 750 Ti szint 60 FPS-hez"
+  }
+]

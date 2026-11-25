@@ -34,17 +34,39 @@ export function gamingScore(cpu: number | undefined, gpu: number | undefined): n
   return cpu === undefined ? gpu : Math.min(gpu, CPU_CAP * cpu)
 }
 
+/**
+ * How a CPU/GPU pair performs. The general model uses the scores; a game model (games.ts)
+ * turns them into FPS for one game and resolution.
+ */
+export interface PerfModel {
+  /** higher is better; undefined when it can't be told (e.g. no GPU score) */
+  score(cpu: number | undefined, gpu: number | undefined): number | undefined
+  limiter(cpu: number, gpu: number): Limiter
+}
+
+/**
+ * Limiter from what each part alone could deliver (same units). The CPU only counts as
+ * the limit when a faster one would bring a noticeable gain.
+ */
+export function limiterOf(cpuCan: number, gpuCan: number): Limiter {
+  if (gpuCan >= cpuCan * (1 + MIN_GAIN)) return 'cpu'
+  if (gpuCan < cpuCan * (GPU_BOUND_RATIO / CPU_CAP)) return 'gpu'
+  return 'balanced'
+}
+
+export const GENERAL_MODEL: PerfModel = {
+  score: gamingScore,
+  limiter: (cpu, gpu) => limiterOf(CPU_CAP * cpu, gpu),
+}
+
 const gpuScoreOf = (b: ResolvedBuild): number | undefined =>
   b.gpu ? b.gpu.perfScore : b.cpu?.integratedGraphics ? IGPU_SCORE : undefined
 
-export function balance(b: ResolvedBuild): Balance {
+export function balance(b: ResolvedBuild, model: PerfModel = GENERAL_MODEL): Balance {
   const cpu = b.cpu?.perfScore
   const gpu = gpuScoreOf(b)
-  const gaming = gamingScore(cpu, gpu)
-  let limiter: Limiter | undefined
-  if (cpu !== undefined && gpu !== undefined)
-    // the CPU only counts as the limit when a faster one would bring a noticeable gain
-    limiter = gpu >= CPU_CAP * cpu * (1 + MIN_GAIN) ? 'cpu' : gpu < GPU_BOUND_RATIO * cpu ? 'gpu' : 'balanced'
+  const gaming = model.score(cpu, gpu)
+  const limiter = cpu !== undefined && gpu !== undefined ? model.limiter(cpu, gpu) : undefined
   return { cpu, gpu, gaming, limiter }
 }
 
@@ -57,6 +79,8 @@ export interface Suggestion {
   score: number
   /** the swap also needs a stronger PSU (wattage or connectors) */
   needsPsu: boolean
+  /** after the swap, which part limits performance */
+  limitedBy?: Limiter
 }
 
 const PSU_RULES = new Set(['psu-wattage', 'psu-connectors'])
@@ -124,9 +148,9 @@ export interface Advice {
 /**
  * @param budgetHuf  only suggest parts up to this price (undefined: no limit)
  */
-export function adviseUpgrades(catalog: Catalog, sel: BuildSelection, budgetHuf?: number): Advice {
+export function adviseUpgrades(catalog: Catalog, sel: BuildSelection, budgetHuf?: number, model: PerfModel = GENERAL_MODEL): Advice {
   const b = catalog.resolveBuild(sel)
-  const bal = balance(b)
+  const bal = balance(b, model)
   const affordable = (s: { price: number }) => budgetHuf === undefined || s.price <= budgetHuf
 
   // ---- graphics card
@@ -135,10 +159,11 @@ export function adviseUpgrades(catalog: Catalog, sel: BuildSelection, budgetHuf?
   if (b.gpu?.perfScore !== undefined || !b.gpu)
     for (const c of fitting(catalog, sel, catalog.data.gpu.filter((g: Gpu) => g.perfScore !== undefined && g.id !== b.gpu?.id))) {
       if (!affordable(c)) continue
-      const after = gamingScore(bal.cpu, c.part.perfScore)!
+      const after = model.score(bal.cpu, c.part.perfScore)!
       const gain = gpuNow ? after / gpuNow - 1 : null
       if (gain !== null && gain < MIN_GAIN) continue
-      gpuCands.push({ part: c.part, priceHuf: c.price, gain, score: after, needsPsu: c.needsPsu })
+      const limitedBy = bal.cpu !== undefined ? model.limiter(bal.cpu, c.part.perfScore!) : undefined
+      gpuCands.push({ part: c.part, priceHuf: c.price, gain, score: after, needsPsu: c.needsPsu, limitedBy })
     }
 
   // ---- processor (on the current board: same socket, memory type…)
@@ -149,8 +174,8 @@ export function adviseUpgrades(catalog: Catalog, sel: BuildSelection, budgetHuf?
       if (c.part.perfScore! > b.cpu.perfScore * (1 + MIN_GAIN)) fasterCpuFits = true
       if (!affordable(c)) continue
       // without a graphics card the CPU's own speed is what counts
-      const before = gpuScoreOf(b) !== undefined ? gamingScore(bal.cpu, gpuScoreOf(b)) : bal.cpu
-      const after = gpuScoreOf(b) !== undefined ? gamingScore(c.part.perfScore, gpuScoreOf(b)) : c.part.perfScore
+      const before = gpuScoreOf(b) !== undefined ? model.score(bal.cpu, gpuScoreOf(b)) : bal.cpu
+      const after = gpuScoreOf(b) !== undefined ? model.score(c.part.perfScore, gpuScoreOf(b)) : c.part.perfScore
       const gain = before && after ? after / before - 1 : null
       if (gain === null || gain < MIN_GAIN) continue
       cpuCands.push({ part: c.part, priceHuf: c.price, gain, score: after!, needsPsu: c.needsPsu })

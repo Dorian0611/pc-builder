@@ -1,0 +1,66 @@
+name: Update games
+
+# The game list of the FPS estimate: Steam's most played games and their requirements.
+on:
+  schedule:
+    - cron: '0 1 1,15 * *' # twice a month, before the price run
+  workflow_dispatch:
+    inputs:
+      max:
+        description: 'Number of Steam games to list'
+        default: '40'
+
+permissions:
+  contents: write # commit games.json
+  actions: write  # trigger the deploy workflow
+
+concurrency:
+  group: update-games
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Read the Steam chart and requirements
+        run: node scripts/games/update-games.mjs --max "${{ inputs.max || '40' }}"
+
+      # Computed list is committed on top of the newest main (the price run may push too).
+      - name: Commit
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp public/data/games.json "$RUNNER_TEMP/games.json"
+          changed=false
+          for attempt in 1 2 3; do
+            git fetch -q origin main
+            git reset -q --hard origin/main
+            cp "$RUNNER_TEMP/games.json" public/data/games.json
+            git add public/data/games.json
+            if git diff --cached --quiet; then
+              echo "No changes."
+              break
+            fi
+            git commit -q -m "Update games $(date -u +%F)"
+            if git push -q origin HEAD:main; then
+              changed=true
+              break
+            fi
+            echo "Push rejected (main moved), retrying…"
+          done
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy
+        if: steps.commit.outputs.changed == 'true'
+        run: gh workflow run deploy.yml --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -9,7 +9,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { cpuPerfScore, gpuPerfScore } from './perf.mjs'
+import { cpuNameKey, cpuPerfScore, gpuPerfScore } from './perf.mjs'
 
 const root = process.argv[2]
 if (!root) {
@@ -272,6 +272,8 @@ function extractIdentifiers(j) {
 
 const identifiers = {}
 const counts = {}
+/** model key → score for every CPU in OpenDB, old platforms included (games' requirements) */
+const cpuScores = {}
 for (const [cat, dir] of Object.entries(SOURCE_DIRS)) {
   const files = fs.readdirSync(path.join(dbDir, dir)).filter((f) => f.endsWith('.json'))
   const out = []
@@ -283,6 +285,11 @@ for (const [cat, dir] of Object.entries(SOURCE_DIRS)) {
     } catch {
       skipped++
       continue
+    }
+    if (cat === 'cpu') {
+      const key = cpuNameKey(j.metadata?.name ?? '')
+      const score = cpuPerfScore(j)
+      if (key && score && !(key in cpuScores)) cpuScores[key] = score
     }
     const part = convert[cat](j)
     if (!part || !part.id || !part.name) {
@@ -312,6 +319,11 @@ fs.writeFileSync(path.join(outDir, 'meta.json'), JSON.stringify(meta, null, 2))
 const privateDir = path.resolve('data')
 fs.mkdirSync(privateDir, { recursive: true })
 fs.writeFileSync(path.join(privateDir, 'part-identifiers.json'), JSON.stringify(identifiers))
+fs.writeFileSync(
+  path.join(privateDir, 'cpu-scores.json'),
+  JSON.stringify(Object.fromEntries(Object.entries(cpuScores).sort(([a], [b]) => a.localeCompare(b))), null, 1) + '\n',
+)
+console.log(`processzor-pontszámok a gépigényekhez: ${Object.keys(cpuScores).length}`)
 const withEan = Object.values(identifiers).filter((x) => x.ean).length
 const withMpn = Object.values(identifiers).filter((x) => x.mpn).length
 console.log(`azonosítók: ${withMpn} cikkszámmal, ${withEan} EAN-nal`)
