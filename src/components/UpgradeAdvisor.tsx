@@ -1,9 +1,10 @@
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { formatHuf } from '../lib/builder'
 import type { Catalog } from '../lib/catalog'
 import { formatFps, gameModel, loadGames, RESOLUTIONS, type GameList, type Resolution } from '../lib/games'
 import { fullName, specLine } from '../lib/specs'
 import { adviseUpgrades, GENERAL_MODEL, partsOf, type Limiter, type Suggestion } from '../lib/upgrade'
+import { buildPlan, type BuildPlan, type StepKind } from '../lib/plan'
 import type { BuildSelection, Part } from '../lib/types'
 
 interface Props {
@@ -22,27 +23,92 @@ const LIMITER_TEXT: Record<Limiter, string> = {
 const pct = (g: number) => `+${Math.round(g * 100)}%`
 
 /** before → after: FPS in game mode, % gain otherwise */
-function Row({ s, before, fps, onApply }: { s: Suggestion; before?: number; fps: boolean; onApply: (p: Part[]) => void }) {
+const show = (score: number | undefined, before: number | undefined, fps: boolean) =>
+  fps ? `kb. ${formatFps(score)} FPS` : score !== undefined && before ? pct(score / before - 1) : ''
+
+const STEP_LABEL: Record<StepKind, string> = { psu: 'Táp', platform: 'Platform', gpu: 'Videókártya' }
+
+/** „Ha nem egyszerre cserélnéd” – the bundle as steps. */
+function PlanView({ plan, before, fps, onApply }: { plan: BuildPlan; before?: number; fps: boolean; onApply: (p: Part[]) => void }) {
+  return (
+    <div className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+      <ol className="space-y-3">
+        {plan.steps.map((st, i) => (
+          <li key={st.kind} className="flex gap-3">
+            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">
+              {i + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-baseline gap-x-3">
+                <span className="font-medium">{STEP_LABEL[st.kind]}</span>
+                <span className="tabular-nums text-slate-600">{formatHuf(st.priceHuf)}</span>
+                {st.score !== undefined && <span className="font-semibold text-emerald-700">utána {show(st.score, before, fps)}</span>}
+              </div>
+              <div className="truncate text-slate-700">{st.parts.map(fullName).join(' + ')}</div>
+              <div className="text-xs text-slate-500">{st.why}</div>
+            </div>
+            <button
+              onClick={() => onApply(st.parts)}
+              className="h-fit shrink-0 rounded-md border border-slate-300 px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-100"
+              title="Csak ezt a lépést tölti be az összeállításba"
+            >
+              Csak ez
+            </button>
+          </li>
+        ))}
+      </ol>
+      <div className="mt-2 border-t border-slate-100 pt-2 text-xs text-slate-600">
+        Összesen: <span className="font-medium tabular-nums">{formatHuf(plan.totalHuf)}</span>
+        {plan.steps.some((x) => x.kind === 'psu') && ' (az új táppal együtt)'}
+        {plan.alternative?.score !== undefined && (
+          <div className="mt-1 text-slate-500">
+            Miért ez a sorrend? Ha előbb a {plan.alternative.kind === 'gpu' ? 'videókártyát' : 'platformot'} cserélnéd, az első lépés után
+            {plan.alternative.score < (plan.steps.find((x) => x.kind !== 'psu')?.score ?? 0)
+              ? ` csak ${show(plan.alternative.score, before, fps) || 'kevesebb'} lenne – így az első lépés többet ad.`
+              : ` ${show(plan.alternative.score, before, fps)} lenne, de az a lépés forintonként kevesebbet hoz.`}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Row({
+  s,
+  before,
+  fps,
+  onApply,
+  planFor,
+}: {
+  s: Suggestion
+  before?: number
+  fps: boolean
+  onApply: (p: Part[]) => void
+  planFor?: (s: Suggestion) => BuildPlan
+}) {
   const parts = partsOf(s)
   const estimated = parts.some((p) => !p.price)
+  const [planOpen, setPlanOpen] = useState(false)
+  const plan = useMemo(() => (planOpen && planFor ? planFor(s) : null), [planOpen, planFor, s])
   return (
-    <li className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2">
-      <div className="min-w-0 flex-1">
-        {parts.map((p, i) => (
-          <div key={p.id}>
-            <div className="truncate font-medium" title={fullName(p)}>
-              {i > 0 && <span className="text-slate-400">+ </span>}
-              {fullName(p)}
+    <li className="rounded-lg bg-slate-50 px-3 py-2">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          {parts.map((p, i) => (
+            <div key={p.id}>
+              <div className="truncate font-medium" title={fullName(p)}>
+                {i > 0 && <span className="text-slate-400">+ </span>}
+                {fullName(p)}
+              </div>
+              <div className="truncate text-xs text-slate-500">{specLine(p)}</div>
             </div>
-            <div className="truncate text-xs text-slate-500">{specLine(p)}</div>
-          </div>
-        ))}
-        {s.keeps?.length ? (
-          <div className="text-xs text-slate-500">
-            Marad a mostani {s.keeps.map((k) => (k === 'memory' ? 'memória' : 'hűtő')).join(' és ')}.
-          </div>
-        ) : null}
-        {s.needsPsu && <div className="text-xs text-amber-700">Erősebb táp is kell hozzá.</div>}
+          ))}
+          {s.keeps?.length ? (
+            <div className="text-xs text-slate-500">
+              Marad a mostani {s.keeps.map((k) => (k === 'memory' ? 'memória' : 'hűtő')).join(' és ')}.
+            </div>
+          ) : null}
+          {s.needsPsu && <div className="text-xs text-amber-700">Erősebb táp is kell hozzá.</div>}
       </div>
       {s.gain !== null && (
         <div className="shrink-0 text-right text-sm font-semibold text-emerald-700" title="becsült javulás játékban">
@@ -62,6 +128,13 @@ function Row({ s, before, fps, onApply }: { s: Suggestion; before?: number; fps:
       <button onClick={() => onApply(parts)} className="shrink-0 rounded-md border border-blue-600 px-2.5 py-1 text-sm font-medium text-blue-700 hover:bg-blue-50">
         Csere
       </button>
+      </div>
+      {planFor && (
+        <button onClick={() => setPlanOpen(!planOpen)} className="mt-1 text-xs font-medium text-blue-700 hover:underline">
+          {planOpen ? 'Építési terv elrejtése ▴' : 'Építési terv – ha nem egyszerre cserélnéd ▾'}
+        </button>
+      )}
+      {plan && <PlanView plan={plan} before={before} fps={fps} onApply={onApply} />}
     </li>
   )
 }
@@ -93,6 +166,7 @@ export function UpgradeAdvisor({ catalog, selection, onApply }: Props) {
     [open, catalog, deferredSel, deferredBudget, deferredModel],
   )
   const bal = advice?.balance
+  const planFor = useCallback((s: Suggestion) => buildPlan(catalog, deferredSel, s, deferredModel), [catalog, deferredSel, deferredModel])
   const hasBase = !!selection.cpu?.length || !!selection.gpu?.length
   const fpsMode = !!game
 
@@ -257,6 +331,7 @@ export function UpgradeAdvisor({ catalog, selection, onApply }: Props) {
                 <Group
                   title="Platformváltás (új processzor + alaplap, ha kell memória és hűtő)"
                   list={advice.platform}
+                  planFor={planFor}
                   before={bal?.gaming}
                   fps={fpsMode}
                   empty=""
@@ -267,6 +342,7 @@ export function UpgradeAdvisor({ catalog, selection, onApply }: Props) {
                 <Group
                   title="Platformváltás + videókártya"
                   list={advice.platformGpu}
+                  planFor={planFor}
                   before={bal?.gaming}
                   fps={fpsMode}
                   empty=""
@@ -318,6 +394,7 @@ function Group({
   fps,
   empty,
   onApply,
+  planFor,
 }: {
   title: string
   list: Suggestion[]
@@ -325,6 +402,7 @@ function Group({
   fps: boolean
   empty: string
   onApply: (p: Part[]) => void
+  planFor?: (s: Suggestion) => BuildPlan
 }) {
   return (
     <div>
@@ -334,7 +412,7 @@ function Group({
       ) : (
         <ul className="space-y-2">
           {list.map((s) => (
-            <Row key={s.part.id} s={s} before={before} fps={fps} onApply={onApply} />
+            <Row key={partsOf(s).map((p) => p.id).join('+')} s={s} before={before} fps={fps} onApply={onApply} planFor={planFor} />
           ))}
         </ul>
       )}
