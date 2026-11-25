@@ -73,7 +73,8 @@ function caseBox(b: ResolvedBuild): Vec3 {
   const boards = c?.supportedBoards ?? ['ATX']
   let box: Vec3 = boards.includes('ATX') || boards.includes('E-ATX') ? [220, 470, 450] : boards.includes('mATX') ? [210, 400, 400] : [185, 300, 360]
   if (c?.maxGpuLengthMm) box = [box[0], box[1], Math.max(box[2], c.maxGpuLengthMm + 60)]
-  if (c?.maxCoolerHeightMm) box = [Math.max(box[0], c.maxCoolerHeightMm + 30), box[1], box[2]]
+  // capped: the data has typos such as a 999 mm cooler limit
+  if (c?.maxCoolerHeightMm) box = [Math.max(box[0], Math.min(c.maxCoolerHeightMm, 200) + 30), box[1], box[2]]
   return box
 }
 

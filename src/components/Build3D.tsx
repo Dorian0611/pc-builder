@@ -25,6 +25,14 @@ function Sway({ controls }: { controls: RefObject<OrbitControlsImpl | null> }) {
   return null
 }
 
+const easeOut = (p: number) => 1 - Math.pow(1 - p, 3)
+
+/** Where an item is drawn at animation progress p (0 = entry offset, 1 = its place). */
+function animatedPosition(pos: Vec3, from: Vec3, p: number): Vec3 {
+  const k = 1 - easeOut(p)
+  return [pos[0] + from[0] * k, pos[1] + from[1] * k, pos[2] + from[2] * k]
+}
+
 /** A part model that slides in (and grows slightly) the first time it appears. */
 function AnimatedItem({ item, onHover }: { item: Item; onHover: (id?: string) => void }) {
   const group = useRef<Group>(null)
@@ -35,16 +43,18 @@ function AnimatedItem({ item, onHover }: { item: Item; onHover: (id?: string) =>
     const g = group.current
     if (!g || progress.current >= 1) return
     progress.current = Math.min(1, progress.current + dt * 1.5)
-    const t = 1 - Math.pow(1 - progress.current, 3) // ease-out
-    g.position.set(pos[0] + from[0] * (1 - t), pos[1] + from[1] * (1 - t), pos[2] + from[2] * (1 - t))
-    g.scale.setScalar(0.85 + 0.15 * t)
+    g.position.set(...animatedPosition(pos, from, progress.current))
+    g.scale.setScalar(0.85 + 0.15 * easeOut(progress.current))
   })
 
+  // The props are re-applied on every render (hover, another part added…), so they must
+  // describe the current animation state – the entry offset here would throw finished
+  // parts back out of the case.
   return (
     <group
       ref={group}
-      position={[pos[0] + from[0], pos[1] + from[1], pos[2] + from[2]]}
-      scale={0.85}
+      position={animatedPosition(pos, from, progress.current)}
+      scale={0.85 + 0.15 * easeOut(progress.current)}
       onPointerOver={(e) => (e.stopPropagation(), onHover(item.partId))}
       onPointerOut={() => onHover(undefined)}
     >
