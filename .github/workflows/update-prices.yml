@@ -79,6 +79,23 @@ jobs:
           path: offers
           merge-multiple: true
 
+      # The artifact list can lag behind a long job that just finished (a Megekko run of
+      # 80 min was missing once): fetch any source whose file didn't arrive, with retries.
+      - name: Fetch late artifacts
+        run: |
+          for src in $(echo "$SOURCES" | jq -r '.[]'); do
+            for attempt in 1 2 3 4 5; do
+              [ -f "offers/$src.json" ] && break
+              echo "offers/$src.json missing, retry $attempt…"
+              sleep 30
+              gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "offers-$src" -D offers || true
+            done
+          done
+          ls -l offers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCES: ${{ inputs.sources || '["manual","pcx","arukereso","megekko","overclockers"]' }}
+
       # Computed on top of the newest main; if someone pushed in the meantime,
       # start again from their commit instead of fighting a merge conflict.
       - name: Compute and commit prices
@@ -92,7 +109,7 @@ jobs:
             git reset -q --hard origin/main
             status=0
             node scripts/prices/update-prices.mjs --offers-dir offers || status=$?
-            git add public/data/prices.json data
+            git add public/data/prices.json public/data/foreign-prices.json data
             if git diff --cached --quiet; then
               echo "No price changes."
               break
