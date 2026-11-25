@@ -3,6 +3,9 @@
 A free, serverless PC part picker for the Hungarian market: pick components, get a
 compatibility check, an estimated price in HUF and a power estimate. Builds can be shared
 as links (`#b=…`, part ids packed into the URL – no server) and saved by name in the browser.
+An upgrade advisor suggests what to replace in an existing build, based on our own rough
+performance scores (`scripts/perf.mjs`: CPU from architecture, clock, cores and cache; GPU from
+a per-chip table).
 The user interface is in Hungarian.
 
 Live site: https://dorian0611.github.io/pc-builder/
@@ -21,6 +24,7 @@ npm run build   # static build into dist/
 - `src/lib/compat.ts` – compatibility rules and power estimate
 - `src/lib/catalog.ts` – data loading, categories
 - `src/lib/share.ts` – build links and builds saved in the browser
+- `src/lib/upgrade.ts` – upgrade advisor (bottleneck, swaps with the best gain per budget)
 - `src/components/` – UI
 - `src/test/fixtures/` – small hand-written part list for tests
 - `.github/workflows/deploy.yml` – test, build and deploy to GitHub Pages on every push to `main`

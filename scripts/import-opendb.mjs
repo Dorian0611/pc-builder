@@ -9,6 +9,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { cpuPerfScore, gpuPerfScore } from './perf.mjs'
 
 const root = process.argv[2]
 if (!root) {
@@ -88,6 +89,7 @@ const convert = {
       memoryTypes: arr(s.memory?.types?.filter((t) => t === 'DDR4' || t === 'DDR5')),
       microarchitecture: arch,
       biosUpdateChipsets: bios?.chipsets,
+      perfScore: cpuPerfScore(j),
     }
   },
 
@@ -142,6 +144,7 @@ const convert = {
       vramGb: num(j.memory),
       lengthMm: num(j.length),
       tdpW: num(j.tdp),
+      perfScore: gpuPerfScore(j.chipset ?? undefined),
       // Ha egy 75 W feletti kártyánál minden csatlakozó 0, az hiányzó adat, nem "nem kell táp".
       powerConnectors:
         !j.power_connectors || (n12 + n8 === 0 && (num(j.tdp) ?? 0) > 75)

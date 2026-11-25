@@ -10,6 +10,8 @@ import { PriceInfo } from './components/PriceInfo'
 import { Build3DPanel } from './components/Build3DPanel'
 import { buildParts } from './lib/builder'
 import { BuildActions } from './components/BuildActions'
+import { UpgradeAdvisor } from './components/UpgradeAdvisor'
+import { withReplaced } from './lib/upgrade'
 import { buildCodeFromHash, decodeBuild, encodeBuild } from './lib/share'
 
 const STORAGE_KEY = 'pc-builder:current'
@@ -238,6 +240,12 @@ function Builder({ catalog, meta }: { catalog: Catalog; meta: CatalogMeta }) {
           <Summary build={build} checks={checks} />
         </div>
       </div>
+
+      <UpgradeAdvisor
+        catalog={catalog}
+        selection={selection}
+        onApply={(part) => replaceSelection(withReplaced(selection, part), `Csere: ${fullName(part)}.`, 'Visszavonás')}
+      />
 
       <Footer meta={meta} />
 
