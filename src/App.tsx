@@ -9,6 +9,8 @@ import { Footer } from './components/Footer'
 import { PriceInfo } from './components/PriceInfo'
 import { Build3DPanel } from './components/Build3DPanel'
 import { buildParts } from './lib/builder'
+import { BuildActions } from './components/BuildActions'
+import { buildCodeFromHash, decodeBuild, encodeBuild } from './lib/share'
 
 const STORAGE_KEY = 'pc-builder:current'
 
@@ -45,13 +47,68 @@ export default function App() {
   return <Builder catalog={state.catalog} meta={state.meta} />
 }
 
+/** Üzenet a lap tetején: megosztott link vagy mentett összeállítás betöltése után. */
+type Notice = { text: string; undoLabel?: string; previous?: BuildSelection }
+
+const loadedText = (what: string, missing: number) =>
+  what + (missing > 0 ? ` ${missing} alkatrésze már nincs az adatbázisban, ezek kimaradtak.` : '')
+
+const isEmpty = (sel: BuildSelection) => !Object.values(sel).some((v) => v && v.length > 0)
+
+/** Megnyitáskor: a link (#b=…) elsőbbséget kap a böngészőben tárolt összeállítással szemben. */
+function initialState(catalog: Catalog): { selection: BuildSelection; notice: Notice | null } {
+  const stored = loadSelection()
+  const code = buildCodeFromHash(window.location.hash)
+  if (code === null) return { selection: stored, notice: null }
+  const { selection, missing } = decodeBuild(code, catalog.getPart)
+  if (encodeBuild(stored) === encodeBuild(selection)) return { selection, notice: null }
+  return {
+    selection,
+    notice: {
+      text: loadedText('Megosztott összeállítást nyitottál meg.', missing),
+      undoLabel: 'Vissza a saját összeállításomhoz',
+      previous: isEmpty(stored) ? undefined : stored,
+    },
+  }
+}
+
 function Builder({ catalog, meta }: { catalog: Catalog; meta: CatalogMeta }) {
-  const [selection, setSelection] = useState<BuildSelection>(loadSelection)
+  const [initial] = useState(() => initialState(catalog))
+  const [selection, setSelection] = useState<BuildSelection>(initial.selection)
+  const [notice, setNotice] = useState<Notice | null>(initial.notice)
   const [picking, setPicking] = useState<CategoryInfo | null>(null)
 
+  // tárolás a böngészőben + a címsorban mindig az aktuális összeállítás linkje
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(selection))
+    const code = encodeBuild(selection)
+    const url = new URL(window.location.href)
+    url.hash = code ? `b=${code}` : ''
+    if (url.href !== window.location.href) history.replaceState(null, '', url)
   }, [selection])
+
+  // másik link beillesztése ugyanebbe a fülbe
+  useEffect(() => {
+    const onHash = () => {
+      const code = buildCodeFromHash(window.location.hash)
+      if (code === null || code === encodeBuild(selection)) return
+      const { selection: next, missing } = decodeBuild(code, catalog.getPart)
+      setNotice({
+        text: loadedText('Megosztott összeállítást nyitottál meg.', missing),
+        undoLabel: 'Vissza az előzőhöz',
+        previous: isEmpty(selection) ? undefined : selection,
+      })
+      setSelection(next)
+    }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [catalog, selection])
+
+  /** Összeállítás cseréje úgy, hogy az előző egy kattintással visszahozható. */
+  const replaceSelection = (next: BuildSelection, text: string, undoLabel: string) => {
+    setNotice({ text, undoLabel, previous: isEmpty(selection) ? undefined : selection })
+    setSelection(next)
+  }
 
   const build = useMemo(() => catalog.resolveBuild(selection), [catalog, selection])
   const checks = useMemo(() => checkBuild(build), [build])
@@ -84,15 +141,36 @@ function Builder({ catalog, meta }: { catalog: Catalog; meta: CatalogMeta }) {
             Válassz alkatrészeket {total.toLocaleString('hu-HU')} termékből – az oldal ellenőrzi, hogy összeillenek-e.
           </p>
         </div>
-        {hasAny && (
-          <button
-            onClick={() => setSelection({})}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100"
-          >
-            Új összeállítás
-          </button>
-        )}
+        <BuildActions
+          catalog={catalog}
+          selection={selection}
+          hasAny={hasAny}
+          onNew={() => replaceSelection({}, 'Új összeállítást kezdtél.', 'Visszavonás')}
+          onLoad={(sel, missing) =>
+            replaceSelection(sel, loadedText('Mentett összeállítás betöltve.', missing), 'Vissza az előzőhöz')
+          }
+        />
       </header>
+
+      {notice && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-900">
+          <span className="flex-1">{notice.text}</span>
+          {notice.previous && (
+            <button
+              onClick={() => {
+                setSelection(notice.previous!)
+                setNotice(null)
+              }}
+              className="font-medium underline"
+            >
+              {notice.undoLabel}
+            </button>
+          )}
+          <button onClick={() => setNotice(null)} className="text-blue-700" aria-label="Üzenet bezárása">
+            ✕
+          </button>
+        </div>
+      )}
 
       {!hasPrices && (
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900">

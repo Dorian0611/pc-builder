@@ -1,7 +1,8 @@
 # PC Builder (Hungarian)
 
 A free, serverless PC part picker for the Hungarian market: pick components, get a
-compatibility check, an estimated price in HUF and a power estimate.
+compatibility check, an estimated price in HUF and a power estimate. Builds can be shared
+as links (`#b=…`, part ids packed into the URL – no server) and saved by name in the browser.
 The user interface is in Hungarian.
 
 Live site: https://dorian0611.github.io/pc-builder/
@@ -19,6 +20,7 @@ npm run build   # static build into dist/
   `node scripts/import-opendb.mjs vendor/opendb`
 - `src/lib/compat.ts` – compatibility rules and power estimate
 - `src/lib/catalog.ts` – data loading, categories
+- `src/lib/share.ts` – build links and builds saved in the browser
 - `src/components/` – UI
 - `src/test/fixtures/` – small hand-written part list for tests
 - `.github/workflows/deploy.yml` – test, build and deploy to GitHub Pages on every push to `main`

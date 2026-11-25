@@ -40,7 +40,7 @@ export function Summary({ build, checks }: Props) {
         {counted > 0 && (
           <ul className="mt-1 space-y-0.5 text-xs text-slate-500">
             {priced > 0 && <li>{priced} alkatrész bolti áron</li>}
-            {estimated > 0 && <li className="text-amber-700">{estimated} alkatrész becsült áron (hasonló termékek alapján)</li>}
+            {estimated > 0 && <li className="text-amber-700">{estimated} alkatrész becsült áron (lásd az alkatrészeknél)</li>}
             {missingPrice > 0 && <li>{missingPrice} alkatrésznek nincs ára – nem számoltuk bele</li>}
           </ul>
         )}
