@@ -3,7 +3,7 @@ import { formatHuf } from '../lib/builder'
 import type { Catalog } from '../lib/catalog'
 import { formatFps, gameModel, loadGames, RESOLUTIONS, type GameList, type Resolution } from '../lib/games'
 import { fullName, specLine } from '../lib/specs'
-import { adviseUpgrades, GENERAL_MODEL, type Limiter, type Suggestion } from '../lib/upgrade'
+import { adviseUpgrades, GENERAL_MODEL, partsOf, type Limiter, type Suggestion } from '../lib/upgrade'
 import type { BuildSelection, Part } from '../lib/types'
 
 interface Props {
@@ -23,7 +23,7 @@ const pct = (g: number) => `+${Math.round(g * 100)}%`
 
 /** before → after: FPS in game mode, % gain otherwise */
 function Row({ s, before, fps, onApply }: { s: Suggestion; before?: number; fps: boolean; onApply: (p: Part[]) => void }) {
-  const parts = s.with ? [s.with, s.part] : [s.part]
+  const parts = partsOf(s)
   const estimated = parts.some((p) => !p.price)
   return (
     <li className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2">
@@ -37,6 +37,11 @@ function Row({ s, before, fps, onApply }: { s: Suggestion; before?: number; fps:
             <div className="truncate text-xs text-slate-500">{specLine(p)}</div>
           </div>
         ))}
+        {s.keeps?.length ? (
+          <div className="text-xs text-slate-500">
+            Marad a mostani {s.keeps.map((k) => (k === 'memory' ? 'memória' : 'hűtő')).join(' és ')}.
+          </div>
+        ) : null}
         {s.needsPsu && <div className="text-xs text-amber-700">Erősebb táp is kell hozzá.</div>}
       </div>
       {s.gain !== null && (
@@ -246,6 +251,33 @@ export function UpgradeAdvisor({ catalog, selection, onApply }: Props) {
                 <p className="-mt-3 text-xs text-slate-500">
                   A két alkatrész itt egymást korlátozza, ezért együtt cserélve jóval többet hoznak, mint bármelyik külön. Az ár a kettő
                   együtt.
+                </p>
+              )}
+              {advice.platform.length > 0 && (
+                <Group
+                  title="Platformváltás (új processzor + alaplap, ha kell memória és hűtő)"
+                  list={advice.platform}
+                  before={bal?.gaming}
+                  fps={fpsMode}
+                  empty=""
+                  onApply={onApply}
+                />
+              )}
+              {advice.platformGpu.length > 0 && (
+                <Group
+                  title="Platformváltás + videókártya"
+                  list={advice.platformGpu}
+                  before={bal?.gaming}
+                  fps={fpsMode}
+                  empty=""
+                  onApply={onApply}
+                />
+              )}
+              {advice.platform.length + advice.platformGpu.length > 0 && (
+                <p className="-mt-3 text-xs text-slate-500">
+                  Platformváltásnál az ár a teljes csomagé. A legolcsóbb, a házba illő alaplapot választottuk; új memória csak
+                  akkor kell, ha a memória típusa változik (pl. DDR4 → DDR5), új hűtő csak akkor, ha a régi nem illik az új
+                  foglalathoz.
                 </p>
               )}
               {advice.other.length > 0 && (

@@ -59,6 +59,8 @@ function coreFactor(cores, threads) {
 }
 
 const round = (x) => Math.round(x)
+/** typical boost of the V-Cache die on dual-die X3D parts */
+const X3D_CACHE_DIE_GHZ = 5.25
 const REFERENCE = 1.0 * 5.1 * 1.0 // Ryzen 5 7600: Zen 4, 5.1 GHz, 6 cores / 12 threads
 
 /**
@@ -78,8 +80,12 @@ export function cpuPerfScore(j) {
   const threads = j.cores?.threads ?? p
   const pThreads = e ? threads - e : threads
   let score = ipc * clock * coreFactor(p, pThreads) * (e ? 1.02 : 1)
-  // 3D V-Cache (96 MB+ L3 on Zen 3/4/5 desktop parts) helps games a lot
-  if (/^Zen [345]$/.test(j.microarchitecture) && (j.cache?.l3 ?? 0) >= 96) score *= 1.2
+  // 3D V-Cache (96 MB+ L3 on Zen 3/4/5 desktop parts) helps games a lot. On 12–16 core X3D
+  // parts games run on the cache die, which clocks lower than the advertised boost.
+  if (/^Zen [345]$/.test(j.microarchitecture) && (j.cache?.l3 ?? 0) >= 96) {
+    if (p > 8 && clock > X3D_CACHE_DIE_GHZ) score *= X3D_CACHE_DIE_GHZ / clock
+    score *= 1.2
+  }
   return round((score / REFERENCE) * 100)
 }
 

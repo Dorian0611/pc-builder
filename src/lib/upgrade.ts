@@ -81,8 +81,10 @@ export interface Suggestion {
   needsPsu: boolean
   /** after the swap, which part limits performance */
   limitedBy?: Limiter
-  /** combined upgrade: this part is swapped together with `part` (priceHuf is the total) */
-  with?: Part
+  /** combined upgrade: these are swapped together with `part` (priceHuf is the total) */
+  also?: Part[]
+  /** platform change: the current memory kit / cooler can stay */
+  keeps?: ('memory' | 'cooler')[]
 }
 
 const PSU_RULES = new Set(['psu-wattage', 'psu-connectors'])
@@ -91,6 +93,12 @@ const PSU_RULES = new Set(['psu-wattage', 'psu-connectors'])
 export function withReplaced(sel: BuildSelection, part: Part): BuildSelection {
   return { ...sel, [part.category]: [part.id] }
 }
+
+/** Every part a suggestion swaps in. */
+export const partsOf = (s: Suggestion): Part[] => [s.part, ...(s.also ?? [])]
+
+/** The build after applying a suggestion. */
+export const applySuggestion = (sel: BuildSelection, s: Suggestion): BuildSelection => partsOf(s).reduce(withReplaced, sel)
 
 /**
  * Candidates for one category that fit the rest of the build. A candidate whose only
@@ -143,6 +151,10 @@ export interface Advice {
   cpu: Suggestion[]
   /** processor + graphics card together (only when clearly better than either alone) */
   combo: Suggestion[]
+  /** new platform: processor + board (+ memory, cooler when needed) */
+  platform: Suggestion[]
+  /** new platform and a new graphics card */
+  platformGpu: Suggestion[]
   /** a faster CPU than the current one fits this board at all (gain aside) */
   fasterCpuFits: boolean
   /** simple fixes that are not about frames: too little RAM, no SSD, weak PSU */
@@ -197,6 +209,12 @@ export function adviseUpgrades(catalog: Catalog, sel: BuildSelection, budgetHuf?
   const cpuPick = pickSpread(frontier(cpuCands))
   const combo = combos(catalog, sel, model, bal, cpuFit, gpuFit, budgetHuf, Math.max(0, ...gpuPick.map((s) => s.score), ...cpuPick.map((s) => s.score)))
 
+  // ---- new platform (other socket), alone or with a new graphics card
+  const { platform, platformGpu } = platformBundles(catalog, sel, model, bal, gpuFit, budgetHuf, {
+    cpuOnly: Math.max(0, ...cpuPick.map((s) => s.score)),
+    overall: Math.max(0, ...[...gpuPick, ...cpuPick, ...combo].map((s) => s.score)),
+  })
+
   // ---- other fixes
   const other: Advice['other'] = []
   const cheapest = (category: Category, test: (p: Part) => boolean) => {
@@ -234,6 +252,8 @@ export function adviseUpgrades(catalog: Catalog, sel: BuildSelection, budgetHuf?
     gpu: gpuPick,
     cpu: cpuPick,
     combo,
+    platform,
+    platformGpu,
     fasterCpuFits,
     other,
   }
@@ -281,15 +301,149 @@ function combos(
       if (budgetHuf !== undefined && price > budgetHuf) continue
       const score = model.score(c.part.perfScore, g.part.perfScore)
       if (score === undefined || score < floor) continue
-      pairs.push({ part: g.part, with: c.part, priceHuf: price, score, gain: score / now - 1, needsPsu: false })
+      pairs.push({ part: c.part, also: [g.part], priceHuf: price, score, gain: score / now - 1, needsPsu: false })
     }
   // the together-check (PSU wattage for both, etc.) only for the few that are shown
   const out: Suggestion[] = []
   for (const s of pickSpread(frontier(pairs))) {
-    const both = withReplaced(withReplaced(sel, s.part), s.with!)
-    const errors = checkBuild(catalog.resolveBuild(both)).filter((e) => e.level === 'error')
+    const errors = checkBuild(catalog.resolveBuild(applySuggestion(sel, s))).filter((e) => e.level === 'error')
     if (errors.some((e) => !PSU_RULES.has(e.rule))) continue
     out.push({ ...s, needsPsu: errors.length > 0 })
   }
   return out
+}
+
+// ---------------------------------------------------------------- platform change
+
+/** Entry-level chipsets: fine for 65 W CPUs, weak power delivery for the big ones. */
+const ENTRY_CHIPSET = /^(A320|A520|A620|H310|H410|H510|H610|H810)/i
+const isStrongCpu = (c: Cpu) => (c.tdpW ?? 0) > 65 || (c.peakW ?? 0) > 120
+
+/** Memory size of a new kit when the memory type changes (DDR4 → DDR5). */
+const NEW_KIT = { modules: 2, moduleSizeGb: 16 }
+
+/**
+ * New processor on a different socket: CPU + the cheapest board for it that fits the case
+ * (and the rest of the build), a new memory kit only if the memory type changes, a new
+ * cooler only if the old one doesn't fit the socket. Optionally with a new graphics card.
+ * Each bundle is priced as a whole and checked as a whole build.
+ */
+export function platformBundles(
+  catalog: Catalog,
+  sel: BuildSelection,
+  model: PerfModel,
+  bal: Balance,
+  gpuFit: Fit<Gpu>[],
+  budgetHuf: number | undefined,
+  /** best scores the simpler upgrades reach: a CPU on the current board / anything */
+  best: { cpuOnly: number; overall: number },
+): { platform: Suggestion[]; platformGpu: Suggestion[] } {
+  const none = { platform: [], platformGpu: [] }
+  const b = catalog.resolveBuild(sel)
+  const now = bal.gaming
+  if (!b.cpu || !b.motherboard || !now || bal.cpu === undefined) return none
+  const gpuNow = gpuScoreOf(b)
+  const rest: BuildSelection = { ...sel, cpu: [], motherboard: [], memory: [], cooler: [] }
+  const priced = <T extends Part>(list: T[]) =>
+    list
+      .map((part) => ({ part, price: effectivePrice(part)! }))
+      .filter((x) => x.price !== undefined)
+      .sort((x, y) => x.price - y.price)
+
+  // cheapest board per socket + memory type (+ class) that fits the case and the rest;
+  // strong CPUs get no entry-level chipset – their power delivery is not made for them
+  const boards = new Map<string, { part: Part; price: number }>()
+  for (const x of priced(catalog.data.motherboard)) {
+    if (x.part.socket === b.motherboard.socket) continue
+    const entry = ENTRY_CHIPSET.test(x.part.chipset ?? '')
+    const keys = [`${x.part.socket}|${x.part.memoryType}|any`, ...(entry ? [] : [`${x.part.socket}|${x.part.memoryType}|strong`])].filter(
+      (k) => !boards.has(k),
+    )
+    if (keys.length === 0) continue
+    if (candidateErrors(catalog, rest, x.part).some((e) => !PSU_RULES.has(e.rule))) continue
+    for (const k of keys) boards.set(k, x)
+  }
+
+  // memory: keep the current kit when the type stays, else the cheapest 2 × 16 GB kit
+  const curType = b.memory[0]?.memoryType
+  const kits = new Map<string, { part: Part; price: number }>()
+  for (const x of priced(catalog.data.memory))
+    if (x.part.modules === NEW_KIT.modules && x.part.moduleSizeGb === NEW_KIT.moduleSizeGb && !kits.has(x.part.memoryType)) kits.set(x.part.memoryType, x)
+
+  // cooler: only if there is one and it doesn't support the new socket
+  const coolerFor = new Map<string, { part: Part; price: number } | null>()
+  const maxH = b.case?.maxCoolerHeightMm
+  const cooler = (socket: string) => {
+    if (!b.cooler || b.cooler.sockets.includes(socket)) return null
+    if (!coolerFor.has(socket))
+      coolerFor.set(
+        socket,
+        priced(catalog.data.cooler).find((x) => x.part.type === 'air' && x.part.sockets.includes(socket) && (maxH === undefined || (x.part.heightMm ?? 999) <= maxH)) ?? null,
+      )
+    return coolerFor.get(socket) ?? undefined
+  }
+
+  // every faster CPU on another socket, with its cheapest complete platform
+  type Bundle = { cpu: Cpu; extra: { part: Part; price: number }[]; keeps: ('memory' | 'cooler')[]; price: number }
+  const bundles: Bundle[] = []
+  for (const c of priced(catalog.data.cpu)) {
+    if (c.part.socket === b.motherboard.socket || c.part.perfScore === undefined || c.part.perfScore <= bal.cpu * (1 + MIN_GAIN)) continue
+    let best: Bundle | undefined
+    for (const mt of c.part.memoryTypes?.length ? c.part.memoryTypes : ['DDR4', 'DDR5']) {
+      const board = boards.get(`${c.part.socket}|${mt}|${isStrongCpu(c.part) ? 'strong' : 'any'}`)
+      if (!board) continue
+      const keepRam = curType === mt && b.memory.length > 0
+      const kit = keepRam ? null : kits.get(mt)
+      if (kit === undefined) continue
+      const cool = cooler(c.part.socket)
+      if (cool === undefined) continue
+      const extra = [board, kit, cool].filter((x): x is { part: Part; price: number } => !!x)
+      const keeps: Bundle['keeps'] = [...(keepRam ? ['memory' as const] : []), ...(b.cooler && !cool ? ['cooler' as const] : [])]
+      const price = c.price + extra.reduce((s, x) => s + x.price, 0)
+      if (!best || price < best.price) best = { cpu: c.part, extra, keeps, price }
+    }
+    if (best) bundles.push(best)
+  }
+
+  const toSuggestion = (x: Bundle, gpu?: Fit<Gpu>): Suggestion | undefined => {
+    const price = x.price + (gpu?.price ?? 0)
+    if (budgetHuf !== undefined && price > budgetHuf) return undefined
+    const score = model.score(x.cpu.perfScore, gpu ? gpu.part.perfScore : gpuNow)
+    if (score === undefined) return undefined
+    return { part: x.cpu, also: [...x.extra.map((e) => e.part), ...(gpu ? [gpu.part] : [])], keeps: x.keeps, priceHuf: price, score, gain: score / now - 1, needsPsu: false }
+  }
+  /** keeps the ones clearly above `floor`, spread, each checked as a whole build */
+  const finish = (list: (Suggestion | undefined)[], floor: number) => {
+    const ok = list.filter((s): s is Suggestion => !!s && s.score >= floor)
+    const out: Suggestion[] = []
+    for (const s of pickSpread(frontier(ok))) {
+      const errors = checkBuild(catalog.resolveBuild(applySuggestion(sel, s))).filter((e) => e.level === 'error')
+      if (errors.some((e) => !PSU_RULES.has(e.rule))) continue
+      out.push({ ...s, needsPsu: errors.length > 0 })
+    }
+    return out
+  }
+
+  const floor1 = Math.max(now, best.cpuOnly) * (1 + MIN_GAIN)
+  const platform = gpuNow === undefined ? [] : finish(bundles.map((x) => toSuggestion(x)), floor1)
+
+  // with a new graphics card: only price/performance-frontier bundles and cards can be in a best pair
+  const bundleFront = (() => {
+    const sorted = [...bundles].sort((x, y) => x.price - y.price)
+    const out: Bundle[] = []
+    let top = -Infinity
+    for (const x of sorted)
+      if (x.cpu.perfScore! > top) {
+        out.push(x)
+        top = x.cpu.perfScore!
+      }
+    return out
+  })()
+  const gpus = partFrontier(gpuFit, (bal.gpu ?? 0) * (1 + MIN_GAIN))
+  const floor2 = Math.max(now, best.overall, ...platform.map((s) => s.score)) * (1 + MIN_GAIN)
+  const platformGpu = finish(
+    bundleFront.flatMap((x) => gpus.map((g) => toSuggestion(x, g))),
+    floor2,
+  )
+  return { platform, platformGpu }
 }
