@@ -1,0 +1,26 @@
+name: Probe shops
+
+# Manual check whether shops allow our price bot – run from GitHub Actions, because that is
+# where the real price collection runs (some shops treat datacenter IPs differently).
+on:
+  workflow_dispatch:
+    inputs:
+      domains:
+        description: 'Space-separated shop domains'
+        default: 'www.mindfactory.de www.alternate.de www.caseking.de www.computeruniverse.net www.notebooksbilliger.de www.cyberport.de www.proshop.de www.galaxus.de www.e-tec.at www.x-kom.pl www.morele.net www.komputronik.pl www.czc.cz www.megekko.nl www.scan.co.uk www.overclockers.co.uk'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: node scripts/prices/probe-shops.mjs $DOMAINS
+        env:
+          DOMAINS: ${{ inputs.domains }}
