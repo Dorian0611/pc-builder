@@ -5,3 +5,4 @@ vendor
 docs/*.pdf
 docs/letters/
 offers/
+*.tsbuildinfo
