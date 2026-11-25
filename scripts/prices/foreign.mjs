@@ -6,7 +6,14 @@
 //    category we take the median ratio "Hungarian shop price / converted foreign price"
 //    over the parts that have both, and the site multiplies the foreign median by it.
 
-import { aggregate, median } from './lib.mjs'
+import { aggregate } from './lib.mjs'
+
+/** Median without rounding (lib's median rounds to whole forints – wrong for ratios). */
+const median = (xs) => {
+  const s = [...xs].sort((a, b) => a - b)
+  const mid = s.length >> 1
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
+}
 
 /** Fewer parts with both prices than this → use the all-category ratio instead. */
 export const MIN_OVERLAP = 8
