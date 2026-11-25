@@ -7,7 +7,7 @@ on:
     inputs:
       sources:
         description: 'Shops to run, as a JSON list'
-        default: '["manual","pcx","arukereso"]'
+        default: '["manual","pcx","arukereso","megekko","overclockers"]'
       max_pages:
         description: 'Max product/listing pages per shop (empty = no limit) – for quick tests'
         default: ''
@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        source: ${{ fromJSON(inputs.sources || '["manual","pcx","arukereso"]') }}
+        source: ${{ fromJSON(inputs.sources || '["manual","pcx","arukereso","megekko","overclockers"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -45,6 +45,8 @@ jobs:
           # Off switches without a code change: Settings → Secrets and variables → Actions → Variables
           PCX_DISABLED: ${{ vars.PCX_DISABLED }}
           ARUKERESO_DISABLED: ${{ vars.ARUKERESO_DISABLED }}
+          MEGEKKO_DISABLED: ${{ vars.MEGEKKO_DISABLED }}
+          OVERCLOCKERS_DISABLED: ${{ vars.OVERCLOCKERS_DISABLED }}
           ARUKERESO_MAX_URLS: ${{ vars.ARUKERESO_MAX_URLS }}
           # Apify API token for the Árukereső/Árgép source (Settings → Secrets → Actions)
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}

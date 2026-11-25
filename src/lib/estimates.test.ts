@@ -27,9 +27,9 @@ describe('addEstimates', () => {
       gpu('target', 'RTX 5070 Ti'),
       gpu('other', 'RTX 5060'),
     ])
-    expect(addEstimates(d)).toEqual({ estimated: 1 })
+    expect(addEstimates(d)).toEqual({ estimated: 1, fromForeign: 0 })
     const t = d.gpu.find((p) => p.id === 'target')!
-    expect(t.estimate).toEqual({ medianHuf: 390_000, lowHuf: 385_000, highHuf: 405_000, count: 3 })
+    expect(t.estimate).toEqual({ basis: 'similar', medianHuf: 390_000, lowHuf: 385_000, highHuf: 405_000, count: 3 })
     expect(d.gpu.find((p) => p.id === 'other')!.estimate).toBeUndefined()
   })
 
@@ -44,6 +44,25 @@ describe('addEstimates', () => {
     addEstimates(d)
     expect(d.gpu.every((p) => p.estimate === undefined)).toBe(true)
     expect(effectivePrice(d.gpu[2])).toBe(999_000)
+  })
+})
+
+describe('estimates from foreign prices', () => {
+  it('use the own foreign median times the category factor, before comparable parts', () => {
+    const d = data([gpu('a', 'RTX 5070', 300_000), gpu('b', 'RTX 5070', 310_000), gpu('t', 'RTX 5070'), gpu('u', 'RTX 5070')])
+    const foreign = {
+      updatedAt: '2026-11-25',
+      factors: { gpu: 1.1, '*': 1.05 },
+      items: { t: { medianHuf: 250_000, minHuf: 240_000, offerCount: 4, sources: ['x'] } },
+    }
+    expect(addEstimates(d, foreign)).toEqual({ estimated: 2, fromForeign: 1 })
+    expect(d.gpu.find((p) => p.id === 't')!.estimate).toEqual({ basis: 'foreign', medianHuf: 275_000, lowHuf: 264_000, highHuf: 275_000, count: 4 })
+    expect(d.gpu.find((p) => p.id === 'u')!.estimate?.basis).toBe('similar')
+  })
+  it('never override a Hungarian shop price', () => {
+    const d = data([gpu('a', 'RTX 5070', 300_000)])
+    addEstimates(d, { updatedAt: 'x', factors: { '*': 1 }, items: { a: { medianHuf: 1, minHuf: 1, offerCount: 1, sources: [] } } })
+    expect(d.gpu[0].estimate).toBeUndefined()
   })
 })
 

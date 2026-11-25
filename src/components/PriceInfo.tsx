@@ -30,10 +30,18 @@ export function PriceInfo({ part, compact = false }: { part: Part; compact?: boo
   const est = part.estimate
   if (!price && est)
     return (
-      <div className="text-right" title={`Becslés ${est.count} hasonló, bolti áras termék alapján; a hasonló termékek fele ${formatHuf(est.lowHuf)} és ${formatHuf(est.highHuf)} közé esik.`}>
+      <div
+        className="text-right"
+        title={
+          est.basis === 'foreign'
+            ? `Becslés ugyanennek a terméknek ${est.count} külföldi bolti ára alapján: forintra váltva, magyar áfával, a magyar árszinthez igazítva. A legolcsóbb külföldi ajánlat kb. ${formatHuf(est.lowHuf)}.`
+            : `Becslés ${est.count} hasonló, bolti áras termék alapján; a hasonló termékek fele ${formatHuf(est.lowHuf)} és ${formatHuf(est.highHuf)} közé esik.`
+        }
+      >
         <div className="font-semibold tabular-nums text-amber-800">kb. {formatHuf(est.medianHuf)}</div>
         <div className="text-xs text-amber-700">
-          becsült{!compact && ` · ${formatHuf(est.lowHuf)}–${formatHuf(est.highHuf)}`}
+          {est.basis === 'foreign' ? `becsült · külföldi árakból (${est.count} bolt)` : 'becsült · hasonló termékekből'}
+          {!compact && est.basis === 'similar' && ` · ${formatHuf(est.lowHuf)}–${formatHuf(est.highHuf)}`}
         </div>
         {compare}
       </div>

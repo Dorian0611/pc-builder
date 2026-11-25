@@ -16,9 +16,16 @@
 // Exception chosen by the project owner (2026-11-25): Árukereső / Árgép prices through the Apify
 // actor "zinc_grill/arukereso-argep-scraper" (sources/arukereso.mjs), which gets past the sites'
 // bot protection itself. Only for the product URLs listed in data/arukereso-urls.csv.
+// Foreign shops checked 2026-11-25 from GitHub Actions (scripts/prices/probe-shops.mjs):
+//   usable: Megekko (NL), Overclockers UK; no machine-readable prices: Mindfactory, Galaxus;
+//   no sitemap: Alternate, Morele; bot blocked: Caseking, Computeruniverse, Cyberport, Proshop,
+//   e-tec, x-kom, Komputronik, CZC, Scan, Notebooksbilliger.
 // New shops that pass the rule can use sources/sitemap-shop.mjs (sitemap → JSON-LD).
 import * as manual from './manual.mjs'
 import * as pcx from './pcx.mjs'
 import * as arukereso from './arukereso.mjs'
+// foreign shops (same rule): their prices are converted to HUF and only feed the estimate
+import * as megekko from './megekko.mjs'
+import * as overclockers from './overclockers.mjs'
 
-export const SOURCES = { manual, pcx, arukereso }
+export const SOURCES = { manual, pcx, arukereso, megekko, overclockers }

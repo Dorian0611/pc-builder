@@ -41,12 +41,24 @@ export interface PriceBlock {
 
 /** Price guessed from comparable priced parts (src/lib/estimates.ts) – never a shop price. */
 export interface PriceEstimate {
+  /** 'foreign': this part's own prices in foreign shops, converted and calibrated;
+   *  'similar': Hungarian prices of comparable parts */
+  basis: 'foreign' | 'similar'
   medianHuf: number
-  /** 25th–75th percentile of the comparable prices */
+  /** range: 25th–75th percentile (similar) or cheapest–median foreign shop (foreign) */
   lowHuf: number
   highHuf: number
-  /** number of comparable priced parts */
+  /** number of comparable parts (similar) or foreign shops (foreign) */
   count: number
+}
+
+/** public/data/foreign-prices.json, written by scripts/prices/update-prices.mjs */
+export interface ForeignPrices {
+  updatedAt: string
+  rateDate?: string
+  /** Hungarian/foreign price ratio per category ("*" = all categories) */
+  factors: Record<string, number>
+  items: Record<string, { medianHuf: number; minHuf: number; offerCount: number; sources: string[] }>
 }
 
 interface BasePart {

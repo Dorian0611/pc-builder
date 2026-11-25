@@ -18,6 +18,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { aggregate, buildIndex, historyRows, isValidOffer, matchOffer, mergePrices } from './lib.mjs'
 import { SOURCES } from './sources/index.mjs'
+import { fetchEcbRates, toHungarianGross } from './fx.mjs'
+import { calibrate } from './foreign.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const dateArg = process.argv.indexOf('--date')
@@ -36,12 +38,28 @@ const index = buildIndex(identifiers)
 
 const failures = []
 const matched = []
+/** foreign shop offers, converted to HUF – they only feed the estimate (foreign-prices.json) */
+const foreignMatched = []
 
-function useOffers(sourceName, offers) {
+let ecb
+/** Foreign sources export `foreign = { country, currency }`; their offers carry the original price. */
+async function toHuf(offer, foreign) {
+  ecb ??= await fetchEcbRates()
+  return { ...offer, priceHuf: toHungarianGross(offer.priceOrig, foreign.currency, foreign.country, ecb.rates) }
+}
+
+async function useOffers(sourceName, offers, foreign) {
   let ok = 0
   let unmatched = 0
   let invalid = 0
-  for (const offer of offers) {
+  for (let offer of offers) {
+    if (foreign) {
+      if (!(offer.priceOrig > 0)) {
+        invalid++
+        continue
+      }
+      offer = await toHuf(offer, foreign)
+    }
     if (!isValidOffer(offer)) {
       invalid++
       continue
@@ -51,10 +69,10 @@ function useOffers(sourceName, offers) {
       unmatched++
       continue
     }
-    matched.push({ partId, offer })
+    ;(foreign ? foreignMatched : matched).push({ partId, offer })
     ok++
   }
-  console.log(`${sourceName}: ${offers.length} ajánlat, ${ok} párosítva, ${unmatched} nem párosítható, ${invalid} érvénytelen`)
+  console.log(`${sourceName}${foreign ? ` (külföldi, ${foreign.country})` : ''}: ${offers.length} ajánlat, ${ok} párosítva, ${unmatched} nem párosítható, ${invalid} érvénytelen`)
 }
 
 if (offersDir) {
@@ -71,17 +89,23 @@ if (offersDir) {
       failures.push(name)
       console.error(`${name}: HIBA – ${r.error}`)
     }
-    useOffers(r.ok ? name : `${name} (részleges)`, r.offers ?? [])
+    try {
+      await useOffers(r.ok ? name : `${name} (részleges)`, r.offers ?? [], SOURCES[name].foreign)
+    } catch (e) {
+      // e.g. ECB rates unavailable: this source is lost for today, the others still count
+      failures.push(name)
+      console.error(`${name}: HIBA – ${e instanceof Error ? e.message : e}`)
+    }
   }
 } else {
   for (const source of Object.values(SOURCES)) {
     try {
-      useOffers(source.name, await source.fetchOffers({ root, today, identifiers }))
+      await useOffers(source.name, await source.fetchOffers({ root, today, identifiers }), source.foreign)
     } catch (e) {
       failures.push(source.name)
       console.error(`${source.name}: HIBA – ${e instanceof Error ? e.message : e}`)
       // a source may still hand back what it collected before the problem
-      if (Array.isArray(e?.partialOffers) && e.partialOffers.length) useOffers(`${source.name} (részleges)`, e.partialOffers)
+      if (Array.isArray(e?.partialOffers) && e.partialOffers.length) await useOffers(`${source.name} (részleges)`, e.partialOffers, source.foreign)
     }
   }
 }
@@ -94,6 +118,34 @@ const next = mergePrices(previous, fresh, today)
 // stable key order → small, readable git diffs
 const sorted = Object.fromEntries(Object.keys(next).sort().map((k) => [k, next[k]]))
 fs.writeFileSync(pricesFile, JSON.stringify(sorted, null, 0) + '\n')
+
+// ---- foreign prices → estimate file (kept apart from the real Hungarian prices)
+const foreignFile = path.join(root, 'public/data/foreign-prices.json')
+const prevForeign = readJson(foreignFile, { items: {} })
+const hasForeignSources = Object.values(SOURCES).some((src) => src.foreign)
+if (hasForeignSources || Object.keys(prevForeign.items ?? {}).length) {
+  const categoryOf = (() => {
+    const map = new Map()
+    for (const cat of ['cpu', 'motherboard', 'memory', 'gpu', 'storage', 'psu', 'case', 'cooler']) {
+      const f = path.join(root, `public/data/${cat}.json`)
+      if (fs.existsSync(f)) for (const part of JSON.parse(fs.readFileSync(f, 'utf8'))) map.set(part.id, cat)
+    }
+    return (id) => map.get(id)
+  })()
+  const freshForeign = aggregate(foreignMatched, today)
+  for (const f of Object.values(freshForeign)) delete f.links // foreign shops are not linked on the site
+  const items = mergePrices(prevForeign.items ?? {}, freshForeign, today)
+  const { factors, overlaps } = calibrate(next, items, categoryOf)
+  const sortedItems = Object.fromEntries(Object.keys(items).sort().map((k) => [k, items[k]]))
+  fs.writeFileSync(
+    foreignFile,
+    JSON.stringify({ updatedAt: today, rateDate: ecb?.date ?? prevForeign.rateDate, factors, overlaps, items: sortedItems }) + '\n',
+  )
+  console.log(
+    `külföldi árak: ${Object.keys(items).length} termék (${Object.keys(freshForeign).length} friss), ` +
+      `kalibráció: ${Object.entries(factors).map(([k, v]) => `${k}=${v} (${overlaps[k] ?? 0})`).join(', ')}`,
+  )
+}
 
 const rows = historyRows(previous, next, today)
 if (rows.length) {

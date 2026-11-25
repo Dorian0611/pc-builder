@@ -19,9 +19,12 @@ import { matchUrlTokens, pageConfirmsPart, slugKeysFromIdentifiers } from '../ma
  * @property {string} sitemap       sitemap or sitemap index URL
  * @property {RegExp} [sitemapFilter]  which child sitemaps of an index to read
  * @property {RegExp} productUrl    which URLs are product pages
+ * @property {RegExp} [excludeUrl]   product URLs to skip (e.g. refurbished "B grade" items)
+ * @property {RegExp} [excludeName]  product names to skip (checked on the page)
  * @property {(url: string, keys: Map<string,string>) => ({partId: string, key: string} | null)} [matchUrl]
  * @property {number} [delayMs]
  * @property {number} [timeBudgetMin]
+ * @property {{ country: string, currency: string }} [foreign]  foreign shop: prices feed only the estimate
  */
 
 /** A part number that matches many different product URLs is too generic to trust. */
@@ -33,6 +36,7 @@ export function createSitemapSource(cfg) {
   const delay = Number(process.env[`${envPrefix}_DELAY_MS`] ?? cfg.delayMs ?? 3000)
   const budgetMs = Number(process.env[`${envPrefix}_TIME_BUDGET_MIN`] ?? cfg.timeBudgetMin ?? 300) * 60_000
   const matchUrl = cfg.matchUrl ?? matchUrlTokens
+  const currency = cfg.foreign?.currency ?? 'HUF'
 
   /** @returns {Promise<import('../lib.mjs').Offer[]>} */
   async function fetchOffers({ identifiers, log = console.log, maxProductPages = Infinity, maxSitemaps = Infinity }) {
@@ -70,7 +74,7 @@ export function createSitemapSource(cfg) {
         continue
       }
       for (const url of locs) {
-        if (!cfg.productUrl.test(url)) continue
+        if (!cfg.productUrl.test(url) || cfg.excludeUrl?.test(url)) continue
         productUrls++
         const hit = matchUrl(url, keys)
         if (!hit || !allowed(url)) continue
@@ -117,19 +121,23 @@ export function createSitemapSource(cfg) {
       }
       consecutiveFailures = 0
       const page = parseProductJsonLd(body)
-      if (!page || page.currency !== 'HUF' || !Number.isFinite(page.priceHuf)) {
-        explain(url, res, page ? `price not in HUF (${page.currency})` : 'no product data')
+      if (!page || page.currency !== currency || !Number.isFinite(page.priceHuf)) {
+        explain(url, res, page ? `price not in ${currency} (${page.currency})` : 'no product data')
         continue
       }
       if (!pageConfirmsPart(identifiers, partId, page)) continue
       // used / refurbished / outlet items would drag the median down
-      if (!page.isNew) continue
+      if (!page.isNew || (cfg.excludeName && page.name && cfg.excludeName.test(page.name))) continue
       confirmed++
       if (!page.inStock) {
         outOfStock++
         continue
       }
-      offers.push({ source: cfg.name, shop: cfg.shop, priceHuf: page.priceHuf, partId, url })
+      offers.push(
+        cfg.foreign
+          ? { source: cfg.name, shop: cfg.shop, priceOrig: page.priceHuf, currency, partId, url }
+          : { source: cfg.name, shop: cfg.shop, priceHuf: page.priceHuf, partId, url },
+      )
     }
     log(
       `${cfg.name}: ${fetched} pages fetched, ${confirmed} confirmed, ${offers.length} in stock, ` +
@@ -148,5 +156,5 @@ export function createSitemapSource(cfg) {
     return offers
   }
 
-  return { name: cfg.name, fetchOffers }
+  return { name: cfg.name, fetchOffers, foreign: cfg.foreign }
 }

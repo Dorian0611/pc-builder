@@ -6,6 +6,7 @@ import type {
   Category,
   Part,
   PartByCategory,
+  ForeignPrices,
   PriceBlock,
   ResolvedBuild,
 } from './types'
@@ -75,11 +76,14 @@ export async function loadCatalog(baseUrl = `${import.meta.env.BASE_URL}data/`):
     get('meta'),
     // prices are optional: the site works (without prices) if the file is missing
     get('prices').catch(() => ({})),
+    // optional too: foreign shop prices, used only for estimates
+    get('foreign-prices').catch(() => undefined),
     ...CATEGORIES.map((c) => get(c.id)),
   ])
+  const foreign = lists.shift() as ForeignPrices | undefined
   const data = Object.fromEntries(CATEGORIES.map((c, i) => [c.id, lists[i]])) as CatalogData
   attachPrices(data, prices)
-  addEstimates(data)
+  addEstimates(data, foreign)
   return { catalog: createCatalog(data), meta }
 }
 

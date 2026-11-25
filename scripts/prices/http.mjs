@@ -58,7 +58,9 @@ export function isChallengePage(html) {
   const title = head.match(/<title[^>]*>([^<]*)/i)?.[1] ?? ''
   return (
     /captcha|just a moment|attention required|are you a robot|access denied|bot check|ellenőrzés folyamatban/i.test(title) ||
-    /cf-chl-|challenge-platform|g-recaptcha|hcaptcha.com|captcha-delivery/i.test(head)
+    /cf-chl-|challenge-platform|g-recaptcha|hcaptcha\.com|captcha-delivery/i.test(head) ||
+    // JavaScript proof-of-work checks, e.g. "One moment, while we check your browser..."
+    /while we check your browser|checking your browser|ddos protection by/i.test(head)
   )
 }
 

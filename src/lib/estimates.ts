@@ -2,7 +2,7 @@
 // comparable parts that do (same GPU chip, same CPU model, same SSD size and interface…).
 // Always shown as an estimate with a range, never as a real price.
 
-import type { CatalogData, Part, PriceEstimate } from './types'
+import type { CatalogData, ForeignPrices, Part, PriceEstimate } from './types'
 
 /** Parts are "comparable" when they share this key; undefined = never estimated. */
 export function comparableKey(p: Part): string | undefined {
@@ -57,10 +57,19 @@ const quantile = (sorted: number[], q: number) => {
   return Math.round(sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo))
 }
 
-/** Adds `estimate` to every unpriced part that has enough priced comparable parts. */
-export function addEstimates(data: CatalogData): { estimated: number } {
+/** Estimates are rounded: a forint-exact figure would suggest more precision than there is. */
+const roundEstimate = (x: number) => Math.round(x / 100) * 100
+
+/**
+ * Adds `estimate` to every part without a Hungarian shop price:
+ *  1. from its own foreign shop prices, calibrated to the Hungarian market, if any;
+ *  2. else from Hungarian prices of comparable parts, if there are enough.
+ */
+export function addEstimates(data: CatalogData, foreign?: ForeignPrices): { estimated: number; fromForeign: number } {
   let estimated = 0
-  for (const list of Object.values(data) as Part[][]) {
+  let fromForeign = 0
+  for (const [category, list] of Object.entries(data) as [string, Part[]][]) {
+    const factor = foreign?.factors[category] ?? foreign?.factors['*'] ?? 1
     const groups = new Map<string, number[]>()
     for (const p of list) {
       if (!p.price) continue
@@ -74,10 +83,24 @@ export function addEstimates(data: CatalogData): { estimated: number } {
     for (const p of list) {
       p.estimate = undefined
       if (p.price) continue
+      const f = foreign?.items[p.id]
+      if (f) {
+        p.estimate = {
+          basis: 'foreign',
+          medianHuf: roundEstimate(f.medianHuf * factor),
+          lowHuf: roundEstimate(f.minHuf * factor),
+          highHuf: roundEstimate(f.medianHuf * factor),
+          count: f.offerCount,
+        }
+        estimated++
+        fromForeign++
+        continue
+      }
       const k = comparableKey(p)
       const g = k ? groups.get(k) : undefined
       if (!g || g.length < MIN_SAMPLES[p.category]) continue
       const est: PriceEstimate = {
+        basis: 'similar',
         medianHuf: quantile(g, 0.5),
         lowHuf: quantile(g, 0.25),
         highHuf: quantile(g, 0.75),
@@ -87,7 +110,7 @@ export function addEstimates(data: CatalogData): { estimated: number } {
       estimated++
     }
   }
-  return { estimated }
+  return { estimated, fromForeign }
 }
 
 /** The price to use in totals and sorting: a real price, else the estimate. */
