@@ -27,7 +27,7 @@ export async function get(url, { accept = 'text/html,application/xml' } = {}) {
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       })
     } catch (e) {
-      if (attempt >= NETWORK_RETRIES) return { status: 0, body: null, error: String(e?.cause?.code ?? e?.name ?? 'network error') }
+      if (attempt >= NETWORK_RETRIES) return { status: 0, body: null, url, error: String(e?.cause?.code ?? e?.name ?? 'network error') }
       await sleep(15_000 * attempt)
       continue
     }

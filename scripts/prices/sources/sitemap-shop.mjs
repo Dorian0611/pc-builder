@@ -58,10 +58,10 @@ export function createSitemapSource(cfg) {
     while (queue.length && timeLeft() > 0 && sitemapsRead < maxSitemaps) {
       const sm = queue.shift()
       if (sitemapsRead > 0) await sleep(delay)
-      const { body, error } = await get(sm)
+      const { body, error, status } = await get(sm)
       sitemapsRead++
       if (!body) {
-        log(`${cfg.name}: sitemap failed ${sm} (${error ?? 'no body'})`)
+        log(`${cfg.name}: sitemap failed ${sm} (HTTP ${status}${error ? `, ${error}` : ''})`)
         continue
       }
       const locs = sitemapLocs(body)
@@ -79,6 +79,7 @@ export function createSitemapSource(cfg) {
       }
     }
     for (const [url, hit] of candidates) if ((urlsPerKey.get(hit.key) ?? 0) > MAX_URLS_PER_KEY) candidates.delete(url)
+    if (productUrls === 0) throw new Error('no product URLs from the sitemaps – the site is not serving us')
     log(`${cfg.name}: ${sitemapsRead} sitemaps, ${productUrls} product URLs, ${candidates.size} look like our parts, ${Math.round((Date.now() - started) / 60000)} min`)
 
     // 2. fetch those pages and confirm the part from the page's own data
@@ -88,6 +89,13 @@ export function createSitemapSource(cfg) {
     let outOfStock = 0
     let failed = 0
     let consecutiveFailures = 0
+    let diagnostics = 0
+    /** Logs what the site sent instead of a product page (first few only). */
+    const explain = (url, res, why) => {
+      if (diagnostics++ >= 5) return
+      const title = res.body?.match(/<title[^>]*>([^<]{0,80})/i)?.[1]?.trim()
+      log(`${cfg.name}: ${why} – HTTP ${res.status}${res.error ? ` ${res.error}` : ''}, final URL ${res.url ?? '?'}, title "${title ?? ''}", ${res.body?.length ?? 0} bytes (${url})`)
+    }
     for (const [url, { partId }] of candidates) {
       if (fetched >= maxProductPages || timeLeft() <= 0) {
         log(`${cfg.name}: stopping early after ${fetched} pages (limit reached)`)
@@ -95,8 +103,10 @@ export function createSitemapSource(cfg) {
       }
       await sleep(delay)
       fetched++
-      const { body, error } = await get(url)
+      const res = await get(url)
+      const { body, error } = res
       if (!body) {
+        explain(url, res, 'no page')
         failed++
         consecutiveFailures++
         if (error && consecutiveFailures >= 10) {
@@ -107,7 +117,10 @@ export function createSitemapSource(cfg) {
       }
       consecutiveFailures = 0
       const page = parseProductJsonLd(body)
-      if (!page || page.currency !== 'HUF' || !Number.isFinite(page.priceHuf)) continue
+      if (!page || page.currency !== 'HUF' || !Number.isFinite(page.priceHuf)) {
+        explain(url, res, page ? `price not in HUF (${page.currency})` : 'no product data')
+        continue
+      }
       if (!pageConfirmsPart(identifiers, partId, page)) continue
       confirmed++
       if (!page.inStock) {
@@ -120,6 +133,11 @@ export function createSitemapSource(cfg) {
       `${cfg.name}: ${fetched} pages fetched, ${confirmed} confirmed, ${offers.length} in stock, ` +
         `${outOfStock} out of stock, ${failed} failed, ${Math.round((Date.now() - started) / 60000)} min total`,
     )
+    if (fetched >= 20 && confirmed === 0) {
+      const err = new Error(`${fetched} pages fetched but none had matching product data – the site is probably not serving us normal pages`)
+      err.partialOffers = offers
+      throw err
+    }
     if (fetched > 20 && failed > fetched * 0.2) {
       const err = new Error(`${failed} failed pages out of ${fetched}`)
       err.partialOffers = offers

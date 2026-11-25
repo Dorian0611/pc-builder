@@ -27,7 +27,9 @@ const identifiers = JSON.parse(fs.readFileSync(path.join(root, 'data/part-identi
 
 let result
 try {
-  const offers = await source.fetchOffers({ root, identifiers })
+  // optional limits for quick diagnostic runs (workflow_dispatch inputs)
+  const maxPages = Number(process.env.MAX_PAGES) || Infinity
+  const offers = await source.fetchOffers({ root, identifiers, maxProductPages: maxPages, maxPages, maxSitemaps: Number(process.env.MAX_SITEMAPS) || Infinity })
   result = { source: sourceName, ok: true, offers }
 } catch (e) {
   console.error(`${sourceName}: HIBA – ${e instanceof Error ? e.message : e}`)
