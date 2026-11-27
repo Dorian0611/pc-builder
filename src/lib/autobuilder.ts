@@ -37,7 +37,8 @@ const GOLD_FROM_W = 650
 const VALUE_TOLERANCE = 0.02
 
 export interface AutoBuildOptions {
-  budgetHuf: number
+  /** undefined: no budget – the strongest build that is still worth its price */
+  budgetHuf?: number
   profile: Profile
   /** also use estimated prices (foreign shops, similar parts); default: real Hungarian prices only */
   allowEstimates?: boolean
@@ -154,8 +155,8 @@ export function autoBuild(catalog: Catalog, opts: AutoBuildOptions): AutoBuildRe
 }
 
 function buildWith(catalog: Catalog, opts: AutoBuildOptions, spec: ProfileSpec): AutoBuildResult {
-  const budget = opts.budgetHuf
-  if (!(budget > 0)) return { ok: false, reason: 'Adj meg egy költségkeretet.' }
+  const budget = opts.budgetHuf ?? Infinity
+  if (!(budget > 0)) return { ok: false, reason: 'Adj meg egy költségkeretet, vagy kapcsold ki.' }
   const priceOf = (p: Part) => (opts.allowEstimates ? effectivePrice(p) : p.price?.medianHuf)
   const priced = <T extends Part>(list: T[], test: (p: T) => boolean = () => true): Priced<T>[] =>
     list
@@ -196,7 +197,8 @@ function buildWith(catalog: Catalog, opts: AutoBuildOptions, spec: ProfileSpec):
   const ramOptions = spec.ram(budget)
   const kitsBySize = new Map(ramOptions.map((o) => [o.gb, priced(catalog.data.memory, (m) => m.modules === 2 && m.moduleSizeGb * 2 === o.gb)]))
   const coolers = priced(catalog.data.cooler, (c) => c.type === 'air')
-  const caseFloor = Math.min(budget * spec.caseShare, CASE_FLOOR_MAX)
+  // (no budget × 0 share would be NaN)
+  const caseFloor = spec.caseShare > 0 ? Math.min(budget * spec.caseShare, CASE_FLOOR_MAX) : 0
   const cases = priced(catalog.data.case).filter((x) => x.price >= caseFloor)
   const psus = priced(catalog.data.psu, (p) => p.formFactor === 'ATX' && /^80\+ (Bronze|Silver|Gold|Platinum|Titanium)$/.test(p.efficiency ?? ''))
   const goodEnough = (p: Psu, need: number) => need < GOLD_FROM_W || /Gold|Platinum|Titanium/.test(p.efficiency ?? '')
@@ -371,8 +373,14 @@ function notesFor(
     notes.push('Integrált grafikájú processzor, külön videókártya nélkül: csendesebb és kevesebbet fogyaszt.')
   }
   if (opts.profile === 'workstation' && r.gpu && isNvidia(r.gpu)) notes.push('NVIDIA videókártya a CUDA / NVENC támogatás miatt (vágó- és 3D-programok).')
+  if (!Number.isFinite(budget))
+    notes.push(
+      opts.profile === 'office'
+        ? 'Keret nélkül is ennyi elég: irodai munkára egy erősebb gép nem lenne érezhetően gyorsabb.'
+        : 'Keret nélkül: a legerősebb összeállítás, de ahol egy drágább alkatrész már nem hozna érezhetően többet, ott megálltunk.',
+    )
   const left = budget - r.price
-  if (left > budget * 0.1)
+  if (Number.isFinite(budget) && left > budget * 0.1)
     notes.push(
       opts.profile === 'office'
         ? `${fmt(left)} marad a keretből: irodai munkára egy erősebb gép nem lenne érezhetően gyorsabb.`

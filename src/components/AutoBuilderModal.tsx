@@ -31,6 +31,7 @@ const PLATFORMS: { id: PlatformPref; label: string }[] = [
 /** „Automatikus összeállítás” – keretből és felhasználási célból kész, kompatibilis gép. */
 export function AutoBuilderModal({ catalog, selection, onClose, onLoad }: Props) {
   const [budget, setBudget] = useState('500000')
+  const [noBudget, setNoBudget] = useState(false)
   const [profile, setProfile] = useState<Profile>('gaming-1080p')
   const [allowEstimates, setAllowEstimates] = useState(false)
   const [platform, setPlatform] = useState<PlatformPref>('any')
@@ -40,14 +41,17 @@ export function AutoBuilderModal({ catalog, selection, onClose, onLoad }: Props)
 
   const budgetHuf = Number(budget.replace(/\D/g, '')) || 0
   // a changed input makes the old result stale
-  useEffect(() => setResult(null), [budgetHuf, profile, allowEstimates, platform, keep])
+  useEffect(() => setResult(null), [budgetHuf, noBudget, profile, allowEstimates, platform, keep])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const run = () => setResult(autoBuild(catalog, { budgetHuf, profile, allowEstimates, platform, keep: keep ? selection : undefined }))
+  const run = () =>
+    setResult(
+      autoBuild(catalog, { budgetHuf: noBudget ? undefined : budgetHuf, profile, allowEstimates, platform, keep: keep ? selection : undefined }),
+    )
 
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-900/60 p-2 sm:p-6" onClick={onClose}>
@@ -62,14 +66,21 @@ export function AutoBuilderModal({ catalog, selection, onClose, onLoad }: Props)
         <div className="space-y-5 px-5 py-4 text-sm">
           {/* ---- keret */}
           <div>
-            <label className="mb-1 block font-medium" htmlFor="ab-budget">
-              Költségkeret
-            </label>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <label className="font-medium" htmlFor="ab-budget">
+                Költségkeret
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-slate-700">
+                <input type="checkbox" checked={noBudget} onChange={(e) => setNoBudget(e.target.checked)} />
+                Nincs keret – a legjobb gép, ami még megéri az árát
+              </label>
+            </div>
+            <div className={`flex flex-wrap items-center gap-2 ${noBudget ? 'opacity-40' : ''}`}>
               <input
                 id="ab-budget"
                 inputMode="numeric"
                 value={budget}
+                disabled={noBudget}
                 onChange={(e) => setBudget(e.target.value)}
                 className="w-36 rounded border border-slate-300 px-2 py-1 text-right tabular-nums"
               />
@@ -77,6 +88,7 @@ export function AutoBuilderModal({ catalog, selection, onClose, onLoad }: Props)
               {QUICK.map((q) => (
                 <button
                   key={q}
+                  disabled={noBudget}
                   onClick={() => setBudget(String(q))}
                   className={`rounded-full border px-3 py-0.5 tabular-nums ${budgetHuf === q ? 'border-blue-600 bg-blue-50 text-blue-800' : 'border-slate-300 hover:bg-slate-50'}`}
                 >
@@ -84,7 +96,7 @@ export function AutoBuilderModal({ catalog, selection, onClose, onLoad }: Props)
                 </button>
               ))}
             </div>
-            {budgetHuf > 0 && budgetHuf < MIN_BUDGET && (
+            {!noBudget && budgetHuf > 0 && budgetHuf < MIN_BUDGET && (
               <p className="mt-1 text-amber-700">{formatHuf(MIN_BUDGET)} alatt új alkatrészekből nem állítható össze teljes gép.</p>
             )}
           </div>
@@ -147,7 +159,7 @@ export function AutoBuilderModal({ catalog, selection, onClose, onLoad }: Props)
           </details>
 
           <div className="flex justify-end">
-            <button onClick={run} disabled={budgetHuf <= 0} className="rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-40">
+            <button onClick={run} disabled={!noBudget && budgetHuf <= 0} className="rounded-md bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-40">
               Összeállítás
             </button>
           </div>
@@ -199,7 +211,7 @@ export function AutoBuilderModal({ catalog, selection, onClose, onLoad }: Props)
                   Újraszámolás
                 </button>
                 <button
-                  onClick={() => onLoad(result.selection, `${PROFILE_TEXT[profile].title}, ${formatHuf(budgetHuf)} keret`)}
+                  onClick={() => onLoad(result.selection, `${PROFILE_TEXT[profile].title}, ${noBudget ? 'keret nélkül' : `${formatHuf(budgetHuf)} keret`}`)}
                   className="rounded-md bg-blue-600 px-3 py-1.5 font-medium text-white hover:bg-blue-700"
                 >
                   Betöltés a szerkesztőbe

@@ -90,3 +90,18 @@ describe('autoBuild', () => {
     expect(fallbacks).toBeGreaterThan(0)
   })
 })
+
+describe('autoBuild without a budget', () => {
+  it('builds the strongest worthwhile machine, at least as fast as any budget', () => {
+    const free = ok(autoBuild(fixtureCatalog, { profile: 'gaming-1440p' }))
+    const capped = ok(autoBuild(fixtureCatalog, { budgetHuf: 1_400_000, profile: 'gaming-1440p' }))
+    expect(free.score).toBeGreaterThanOrEqual(capped.score)
+    expect(checkBuild(fixtureCatalog.resolveBuild(free.selection)).filter((e) => e.level === 'error')).toEqual([])
+    expect(free.notes.join(' ')).toMatch(/Keret nélkül/)
+    expect(free.notes.join(' ')).not.toMatch(/Infinity|marad a keretből/)
+  })
+  it('office stays modest even without a budget', () => {
+    const r = ok(autoBuild(fixtureCatalog, { profile: 'office' }))
+    expect(r.totalHuf).toBeLessThan(500_000)
+  })
+})
