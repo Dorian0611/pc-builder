@@ -316,8 +316,8 @@ function combos(
 // ---------------------------------------------------------------- platform change
 
 /** Entry-level chipsets: fine for 65 W CPUs, weak power delivery for the big ones. */
-const ENTRY_CHIPSET = /^(A320|A520|A620|H310|H410|H510|H610|H810)/i
-const isStrongCpu = (c: Cpu) => (c.tdpW ?? 0) > 65 || (c.peakW ?? 0) > 120
+export const ENTRY_CHIPSET = /^(A320|A520|A620|H310|H410|H510|H610|H810)/i
+export const isStrongCpu = (c: Cpu) => (c.tdpW ?? 0) > 65 || (c.peakW ?? 0) > 120
 
 /** Memory size of a new kit when the memory type changes (DDR4 → DDR5). */
 const NEW_KIT = { modules: 2, moduleSizeGb: 16 }

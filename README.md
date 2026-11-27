@@ -8,6 +8,8 @@ performance scores (`scripts/perf.mjs`: CPU from architecture, clock, cores and 
 a per-chip table). The FPS estimate covers Steam's most played games, refreshed twice a month
 from their store requirements (`scripts/games/`), plus hand-kept entries such as GTA VI
 (`data/games-manual.json`, marked as estimates).
+The auto-builder (`src/lib/autobuilder.ts`) puts together a complete, compatible build for a
+budget and a use case (1080p / 1440p gaming, workstation, office), in the browser.
 The user interface is in Hungarian.
 
 Live site: https://dorian0611.github.io/pc-builder/

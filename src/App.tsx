@@ -11,6 +11,7 @@ import { Build3DPanel } from './components/Build3DPanel'
 import { buildParts } from './lib/builder'
 import { BuildActions } from './components/BuildActions'
 import { UpgradeAdvisor } from './components/UpgradeAdvisor'
+import { AutoBuilderModal } from './components/AutoBuilderModal'
 import { withReplaced } from './lib/upgrade'
 import { buildCodeFromHash, decodeBuild, encodeBuild } from './lib/share'
 
@@ -79,6 +80,7 @@ function Builder({ catalog, meta }: { catalog: Catalog; meta: CatalogMeta }) {
   const [selection, setSelection] = useState<BuildSelection>(initial.selection)
   const [notice, setNotice] = useState<Notice | null>(initial.notice)
   const [picking, setPicking] = useState<CategoryInfo | null>(null)
+  const [autoOpen, setAutoOpen] = useState(false)
 
   // tárolás a böngészőben + a címsorban mindig az aktuális összeállítás linkje
   useEffect(() => {
@@ -143,16 +145,36 @@ function Builder({ catalog, meta }: { catalog: Catalog; meta: CatalogMeta }) {
             Válassz alkatrészeket {total.toLocaleString('hu-HU')} termékből – az oldal ellenőrzi, hogy összeillenek-e.
           </p>
         </div>
-        <BuildActions
+        <div className="flex flex-wrap items-start gap-2">
+          <button
+            onClick={() => setAutoOpen(true)}
+            className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Automatikus összeállítás
+          </button>
+          <BuildActions
+            catalog={catalog}
+            selection={selection}
+            hasAny={hasAny}
+            onNew={() => replaceSelection({}, 'Új összeállítást kezdtél.', 'Visszavonás')}
+            onLoad={(sel, missing) =>
+              replaceSelection(sel, loadedText('Mentett összeállítás betöltve.', missing), 'Vissza az előzőhöz')
+            }
+          />
+        </div>
+      </header>
+
+      {autoOpen && (
+        <AutoBuilderModal
           catalog={catalog}
           selection={selection}
-          hasAny={hasAny}
-          onNew={() => replaceSelection({}, 'Új összeállítást kezdtél.', 'Visszavonás')}
-          onLoad={(sel, missing) =>
-            replaceSelection(sel, loadedText('Mentett összeállítás betöltve.', missing), 'Vissza az előzőhöz')
-          }
+          onClose={() => setAutoOpen(false)}
+          onLoad={(sel, summary) => {
+            replaceSelection(sel, `Automatikus összeállítás betöltve (${summary}).`, 'Vissza az előzőhöz')
+            setAutoOpen(false)
+          }}
         />
-      </header>
+      )}
 
       {notice && (
         <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-900">
