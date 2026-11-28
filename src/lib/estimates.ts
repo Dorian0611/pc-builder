@@ -2,7 +2,7 @@
 // comparable parts that do (same GPU chip, same CPU model, same SSD size and interface…).
 // Always shown as an estimate with a range, never as a real price.
 
-import type { CatalogData, ForeignPrices, Part, PriceEstimate } from './types'
+import type { CatalogData, ForeignPrices, Part, PriceEstimate, UsedPrices } from './types'
 
 /** Parts are "comparable" when they share this key; undefined = never estimated. */
 export function comparableKey(p: Part): string | undefined {
@@ -63,9 +63,10 @@ const roundEstimate = (x: number) => Math.round(x / 100) * 100
 /**
  * Adds `estimate` to every part without a Hungarian shop price:
  *  1. from its own foreign shop prices, calibrated to the Hungarian market, if any;
- *  2. else from Hungarian prices of comparable parts, if there are enough.
+ *  2. else from the Hungarian used market (no new price anywhere), if any;
+ *  3. else from Hungarian prices of comparable parts, if there are enough.
  */
-export function addEstimates(data: CatalogData, foreign?: ForeignPrices): { estimated: number; fromForeign: number } {
+export function addEstimates(data: CatalogData, foreign?: ForeignPrices, used?: UsedPrices): { estimated: number; fromForeign: number } {
   let estimated = 0
   let fromForeign = 0
   for (const [category, list] of Object.entries(data) as [string, Part[]][]) {
@@ -94,6 +95,12 @@ export function addEstimates(data: CatalogData, foreign?: ForeignPrices): { esti
         }
         estimated++
         fromForeign++
+        continue
+      }
+      const u = used?.items[p.id]
+      if (u) {
+        p.estimate = { basis: 'used', medianHuf: roundEstimate(u.medianHuf), lowHuf: roundEstimate(u.minHuf), highHuf: roundEstimate(u.medianHuf), count: u.offerCount }
+        estimated++
         continue
       }
       const k = comparableKey(p)

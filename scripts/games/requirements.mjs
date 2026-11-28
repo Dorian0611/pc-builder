@@ -56,9 +56,10 @@ export function parseGpus(text) {
     if (n >= 600 && n < 1700) add(`GeForce GTX ${m[1]}${m[2] ? ' Ti' : ''}`)
   }
   const t = text.replace(/nvidia|geforce|amd|radeon|intel/gi, ' ').replace(/\s+/g, ' ')
-  for (const m of t.matchAll(/\b(RTX|GTX|GT)\s*-?\s*(\d{3,4})\s*(Ti|SUPER|Super)?(?:\s*(Ti|SUPER|Super))?/g)) {
+  // case-insensitive: ads write "RTX3070TI", "rtx 4070 super"
+  for (const m of t.matchAll(/\b(RTX|GTX|GT)\s*-?\s*(\d{3,4})\s*(Ti|SUPER)?(?:\s*(Ti|SUPER))?(?![a-z])/gi)) {
     const suffix = [m[3], m[4]].filter(Boolean).map((x) => (/super/i.test(x) ? 'SUPER' : 'Ti')).join(' ')
-    add(`GeForce ${m[1]} ${m[2]}${suffix ? ' ' + suffix : ''}`)
+    add(`GeForce ${m[1].toUpperCase()} ${m[2]}${suffix ? ' ' + suffix : ''}`)
   }
   for (const m of t.matchAll(/\bRX\s*-?\s*(\d{3,4})\s*(XTX|XT|GRE)?/gi)) add(`Radeon RX ${m[1]}${m[2] ? ' ' + m[2].toUpperCase() : ''}`)
   for (const m of t.matchAll(/\bRX\s*Vega\s*(56|64)/gi)) add(`Radeon RX Vega ${m[1]}`)

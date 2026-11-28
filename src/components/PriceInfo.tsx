@@ -35,12 +35,18 @@ export function PriceInfo({ part, compact = false }: { part: Part; compact?: boo
         title={
           est.basis === 'foreign'
             ? `Becslés ugyanennek a terméknek ${est.count} külföldi bolti ára alapján: forintra váltva, magyar áfával, a magyar árszinthez igazítva. A legolcsóbb külföldi ajánlat kb. ${formatHuf(est.lowHuf)}.`
-            : `Becslés ${est.count} hasonló, bolti áras termék alapján; a hasonló termékek fele ${formatHuf(est.lowHuf)} és ${formatHuf(est.highHuf)} közé esik.`
+            : est.basis === 'used'
+              ? `Újonnan nem találtuk boltban. Használtan: ${est.count} HardverApró-hirdetés kért árának középértéke (ugyanez a ${part.category === 'gpu' ? 'grafikus chip' : 'processzormodell'}, bármely gyártótól); a legolcsóbb kb. ${formatHuf(est.lowHuf)}.`
+              : `Becslés ${est.count} hasonló, bolti áras termék alapján; a hasonló termékek fele ${formatHuf(est.lowHuf)} és ${formatHuf(est.highHuf)} közé esik.`
         }
       >
         <div className="font-semibold tabular-nums text-amber-800">kb. {formatHuf(est.medianHuf)}</div>
         <div className="text-xs text-amber-700">
-          {est.basis === 'foreign' ? `becsült · külföldi árakból (${est.count} bolt)` : 'becsült · hasonló termékekből'}
+          {est.basis === 'foreign'
+            ? `becsült · külföldi árakból (${est.count} bolt)`
+            : est.basis === 'used'
+              ? `használtan · HardverApró (${est.count} hirdetés)`
+              : 'becsült · hasonló termékekből'}
           {!compact && est.basis === 'similar' && ` · ${formatHuf(est.lowHuf)}–${formatHuf(est.highHuf)}`}
         </div>
         {compare}

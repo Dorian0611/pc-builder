@@ -107,7 +107,8 @@ export const applySuggestion = (sel: BuildSelection, s: Suggestion): BuildSelect
 function fitting<T extends Part>(catalog: Catalog, sel: BuildSelection, list: T[]): { part: T; needsPsu: boolean; price: number }[] {
   const out: { part: T; needsPsu: boolean; price: number }[] = []
   for (const part of list) {
-    const price = effectivePrice(part)
+    // advice is about buying new: used-market prices don't count
+    const price = part.estimate?.basis === 'used' ? part.price?.medianHuf : effectivePrice(part)
     if (price === undefined) continue
     const rest = { ...sel, [part.category]: [] }
     const errors = candidateErrors(catalog, rest, part)

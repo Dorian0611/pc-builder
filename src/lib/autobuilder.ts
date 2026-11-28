@@ -157,7 +157,9 @@ export function autoBuild(catalog: Catalog, opts: AutoBuildOptions): AutoBuildRe
 function buildWith(catalog: Catalog, opts: AutoBuildOptions, spec: ProfileSpec): AutoBuildResult {
   const budget = opts.budgetHuf ?? Infinity
   if (!(budget > 0)) return { ok: false, reason: 'Adj meg egy költségkeretet, vagy kapcsold ki.' }
-  const priceOf = (p: Part) => (opts.allowEstimates ? effectivePrice(p) : p.price?.medianHuf)
+  // a new build: used-market prices never count, even with estimates allowed
+  const priceOf = (p: Part) =>
+    opts.allowEstimates && p.estimate?.basis !== 'used' ? effectivePrice(p) : p.price?.medianHuf
   const priced = <T extends Part>(list: T[], test: (p: T) => boolean = () => true): Priced<T>[] =>
     list
       .filter(test)

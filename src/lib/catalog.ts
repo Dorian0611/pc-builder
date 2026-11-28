@@ -9,6 +9,7 @@ import type {
   ForeignPrices,
   PriceBlock,
   ResolvedBuild,
+  UsedPrices,
 } from './types'
 
 export interface CategoryInfo {
@@ -78,12 +79,15 @@ export async function loadCatalog(baseUrl = `${import.meta.env.BASE_URL}data/`):
     get('prices').catch(() => ({})),
     // optional too: foreign shop prices, used only for estimates
     get('foreign-prices').catch(() => undefined),
+    // optional: used-market prices, for parts with no new price
+    get('used-prices').catch(() => undefined),
     ...CATEGORIES.map((c) => get(c.id)),
   ])
   const foreign = lists.shift() as ForeignPrices | undefined
+  const used = lists.shift() as UsedPrices | undefined
   const data = Object.fromEntries(CATEGORIES.map((c, i) => [c.id, lists[i]])) as CatalogData
   attachPrices(data, prices)
-  addEstimates(data, foreign)
+  addEstimates(data, foreign, used)
   return { catalog: createCatalog(data), meta }
 }
 

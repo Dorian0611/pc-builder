@@ -20,6 +20,8 @@ import { aggregate, buildIndex, historyRows, isValidOffer, matchOffer, mergePric
 import { SOURCES } from './sources/index.mjs'
 import { fetchEcbRates, toHungarianGross } from './fx.mjs'
 import { calibrate } from './foreign.mjs'
+import { aggregateUsed, usedPricesByPart } from './used.mjs'
+import { cpuNameKey } from '../perf.mjs'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const dateArg = process.argv.indexOf('--date')
@@ -40,6 +42,9 @@ const failures = []
 const matched = []
 /** foreign shop offers, converted to HUF – they only feed the estimate (foreign-prices.json) */
 const foreignMatched = []
+/** used-market ads per CPU model / GPU chip (sources that export `used = true`) – used-prices.json */
+const usedAds = []
+const usedSources = new Set()
 
 let ecb
 /** Foreign sources export `foreign = { country, currency }`; their offers carry the original price. */
@@ -48,7 +53,13 @@ async function toHuf(offer, foreign) {
   return { ...offer, priceHuf: toHungarianGross(offer.priceOrig, foreign.currency, foreign.country, ecb.rates) }
 }
 
-async function useOffers(sourceName, offers, foreign) {
+async function useOffers(sourceName, offers, foreign, used) {
+  if (used) {
+    usedAds.push(...offers.filter((o) => o.kind && o.key && o.priceHuf > 0))
+    usedSources.add(sourceName.split(' ')[0])
+    console.log(`${sourceName} (használt piac): ${offers.length} hirdetés`)
+    return
+  }
   let ok = 0
   let unmatched = 0
   let invalid = 0
@@ -90,7 +101,7 @@ if (offersDir) {
       console.error(`${name}: HIBA – ${r.error}`)
     }
     try {
-      await useOffers(r.ok ? name : `${name} (részleges)`, r.offers ?? [], SOURCES[name].foreign)
+      await useOffers(r.ok ? name : `${name} (részleges)`, r.offers ?? [], SOURCES[name].foreign, SOURCES[name].used)
     } catch (e) {
       // e.g. ECB rates unavailable: this source is lost for today, the others still count
       failures.push(name)
@@ -100,12 +111,12 @@ if (offersDir) {
 } else {
   for (const source of Object.values(SOURCES)) {
     try {
-      await useOffers(source.name, await source.fetchOffers({ root, today, identifiers }), source.foreign)
+      await useOffers(source.name, await source.fetchOffers({ root, today, identifiers }), source.foreign, source.used)
     } catch (e) {
       failures.push(source.name)
       console.error(`${source.name}: HIBA – ${e instanceof Error ? e.message : e}`)
       // a source may still hand back what it collected before the problem
-      if (Array.isArray(e?.partialOffers) && e.partialOffers.length) await useOffers(`${source.name} (részleges)`, e.partialOffers, source.foreign)
+      if (Array.isArray(e?.partialOffers) && e.partialOffers.length) await useOffers(`${source.name} (részleges)`, e.partialOffers, source.foreign, source.used)
     }
   }
 }
@@ -145,6 +156,24 @@ if (hasForeignSources || Object.keys(prevForeign.items ?? {}).length) {
     `külföldi árak: ${Object.keys(items).length} termék (${Object.keys(freshForeign).length} friss), ` +
       `kalibráció: ${Object.entries(factors).map(([k, v]) => `${k}=${v} (${overlaps[k] ?? 0})`).join(', ')}`,
   )
+}
+
+// ---- used-market prices (kept apart: shown only for parts with no new price)
+const usedFile = path.join(root, 'public/data/used-prices.json')
+const prevUsed = readJson(usedFile, { items: {} })
+if (usedAds.length || Object.keys(prevUsed.items ?? {}).length) {
+  const load = (cat) => readJson(path.join(root, `public/data/${cat}.json`), [])
+  const byPart = usedPricesByPart(aggregateUsed(usedAds), load('cpu'), load('gpu'), cpuNameKey)
+  const fresh = Object.fromEntries(
+    Object.entries(byPart).map(([id, p]) => [
+      id,
+      { medianHuf: p.medianHuf, minHuf: p.minHuf, offerCount: p.count, updatedAt: today, sources: [...usedSources] },
+    ]),
+  )
+  const items = mergePrices(prevUsed.items ?? {}, fresh, today)
+  const sortedItems = Object.fromEntries(Object.keys(items).sort().map((k) => [k, items[k]]))
+  fs.writeFileSync(usedFile, JSON.stringify({ updatedAt: today, items: sortedItems }) + '\n')
+  console.log(`használt árak: ${Object.keys(items).length} alkatrész (${Object.keys(fresh).length} friss, ${usedAds.length} hirdetésből)`)
 }
 
 const rows = historyRows(previous, next, today)

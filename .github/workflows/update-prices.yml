@@ -7,7 +7,7 @@ on:
     inputs:
       sources:
         description: 'Shops to run, as a JSON list'
-        default: '["manual","pcx","bestbyte","pcland","arukereso","megekko","overclockers"]'
+        default: '["manual","pcx","bestbyte","pcland","hardverapro","arukereso","megekko","overclockers"]'
       max_pages:
         description: 'Max product/listing pages per shop (empty = no limit) – for quick tests'
         default: ''
@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        source: ${{ fromJSON(inputs.sources || '["manual","pcx","bestbyte","pcland","arukereso","megekko","overclockers"]') }}
+        source: ${{ fromJSON(inputs.sources || '["manual","pcx","bestbyte","pcland","hardverapro","arukereso","megekko","overclockers"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -49,6 +49,7 @@ jobs:
           OVERCLOCKERS_DISABLED: ${{ vars.OVERCLOCKERS_DISABLED }}
           BESTBYTE_DISABLED: ${{ vars.BESTBYTE_DISABLED }}
           PCLAND_DISABLED: ${{ vars.PCLAND_DISABLED }}
+          HARDVERAPRO_DISABLED: ${{ vars.HARDVERAPRO_DISABLED }}
           ARUKERESO_MAX_URLS: ${{ vars.ARUKERESO_MAX_URLS }}
           # Apify API token for the Árukereső/Árgép source (Settings → Secrets → Actions)
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
@@ -96,7 +97,7 @@ jobs:
           ls -l offers
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCES: ${{ inputs.sources || '["manual","pcx","bestbyte","pcland","arukereso","megekko","overclockers"]' }}
+          SOURCES: ${{ inputs.sources || '["manual","pcx","bestbyte","pcland","hardverapro","arukereso","megekko","overclockers"]' }}
 
       # Computed on top of the newest main; if someone pushed in the meantime,
       # start again from their commit instead of fighting a merge conflict.
@@ -111,7 +112,7 @@ jobs:
             git reset -q --hard origin/main
             status=0
             node scripts/prices/update-prices.mjs --offers-dir offers || status=$?
-            git add public/data/prices.json public/data/foreign-prices.json data
+            git add public/data/prices.json public/data/foreign-prices.json public/data/used-prices.json data
             if git diff --cached --quiet; then
               echo "No price changes."
               break
