@@ -28,6 +28,9 @@ const dateArg = process.argv.indexOf('--date')
 const today = dateArg > 0 ? process.argv[dateArg + 1] : new Date().toISOString().slice(0, 10)
 const dirArg = process.argv.indexOf('--offers-dir')
 const offersDir = dirArg > 0 ? path.resolve(process.argv[dirArg + 1]) : undefined
+// --sources '["pcx",…]': the sources this run collected; the others are not expected (a partial run)
+const srcArg = process.argv.indexOf('--sources')
+const runSources = srcArg > 0 ? JSON.parse(process.argv[srcArg + 1]) : Object.keys(SOURCES)
 
 const readJson = (file, fallback) => (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : fallback)
 
@@ -88,7 +91,7 @@ async function useOffers(sourceName, offers, foreign, used) {
 
 if (offersDir) {
   // offers collected by the per-shop jobs; a missing file = that job did not finish
-  for (const name of Object.keys(SOURCES)) {
+  for (const name of Object.keys(SOURCES).filter((n) => runSources.includes(n))) {
     const file = path.join(offersDir, `${name}.json`)
     const r = readJson(file, null)
     if (!r) {

@@ -103,6 +103,8 @@ jobs:
       # start again from their commit instead of fighting a merge conflict.
       - name: Compute and commit prices
         id: commit
+        env:
+          SOURCES: ${{ inputs.sources || '["manual","pcx","bestbyte","pcland","hardverapro","arukereso","megekko","overclockers"]' }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -111,7 +113,7 @@ jobs:
             git fetch -q origin main
             git reset -q --hard origin/main
             status=0
-            node scripts/prices/update-prices.mjs --offers-dir offers || status=$?
+            node scripts/prices/update-prices.mjs --offers-dir offers --sources "$SOURCES" || status=$?
             git add public/data/prices.json public/data/foreign-prices.json public/data/used-prices.json data
             if git diff --cached --quiet; then
               echo "No price changes."
