@@ -90,7 +90,7 @@ export function usedPricesByPart(prices, cpus, gpus, cpuKeyOf) {
   }
   for (const g of gpus) {
     if (!g.chip) continue
-    const p = prices.get(`gpu:${g.chip}`) ?? prices.get(`gpu:${g.chip.replace(/ \d+ GB$/, '')}`)
+    const p = prices.get(`gpu:${g.chip}`) ?? prices.get(`gpu:${g.chip.replace(/ (\d+ GB|LHR)$/, '')}`)
     if (p) out[g.id] = p
   }
   return out

@@ -51,10 +51,10 @@ describe('used-market ads', () => {
     const out = usedPricesByPart(
       prices,
       [{ id: 'c1', brand: 'AMD', name: 'Ryzen 5 3600' }, { id: 'c2', brand: 'AMD', name: 'Ryzen 5 3600X' }],
-      [{ id: 'g1', chip: 'GeForce RTX 3060 12 GB' }, { id: 'g2', chip: 'GeForce RTX 3060 Ti' }],
+      [{ id: 'g1', chip: 'GeForce RTX 3060 12 GB' }, { id: 'g2', chip: 'GeForce RTX 3060 Ti' }, { id: 'g3', chip: 'GeForce RTX 3060 LHR' }],
       cpuNameKey,
     )
-    expect(Object.keys(out).sort()).toEqual(['c1', 'g1'])
+    expect(Object.keys(out).sort()).toEqual(['c1', 'g1', 'g3'])
   })
 
   it('reads the HardverApró listing markup, nothing about the seller', () => {
