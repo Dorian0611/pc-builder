@@ -9,7 +9,9 @@
 // Only the price and the product URL are taken from a page.
 
 import { get, isSitemapIndex, parseProductJsonLd, robotsAllows, sitemapLocs, sleep } from '../http.mjs'
-import { matchUrlTokens, pageConfirmsPart, slugKeysFromIdentifiers } from '../match.mjs'
+import { matchCpuModel, matchMpnInName, matchUrlTokens, pageConfirmsPart, slugKeysFromIdentifiers } from '../match.mjs'
+import { buildIndex, normalizeEan, normalizeMpn } from '../lib.mjs'
+import { loadCatalogInfo } from '../catalog-info.mjs'
 
 /**
  * @typedef {object} ShopConfig
@@ -25,6 +27,11 @@ import { matchUrlTokens, pageConfirmsPart, slugKeysFromIdentifiers } from '../ma
  * @property {number} [delayMs]
  * @property {number} [timeBudgetMin]
  * @property {{ country: string, currency: string }} [foreign]  foreign shop: prices feed only the estimate
+ * @property {(url: string) => number} [newestFirst]  rank for visiting candidates (higher first), e.g. the
+ *   shop's product id – sitemaps that list old, discontinued products first would eat the time budget
+ * @property {boolean} [nameMatch]  shop URLs / pages carry product names rather than part numbers:
+ *   also pick candidates by part numbers or CPU models inside the URL slug, and confirm by the
+ *   product name on the page when it has no MPN/EAN of its own
  */
 
 /** A part number that matches many different product URLs is too generic to trust. */
@@ -47,12 +54,28 @@ export function createSitemapSource(cfg) {
     const started = Date.now()
     const timeLeft = () => budgetMs - (Date.now() - started)
 
-    const robots = (await get(`${cfg.base}/robots.txt`)).body ?? ''
+    // asked for as plain text: some servers answer 406 to an HTML Accept header, and an
+    // unread robots.txt must not count as "no rules"
+    const robotsRes = await get(`${cfg.base}/robots.txt`, { accept: 'text/plain,*/*' })
+    if (!robotsRes.body && robotsRes.status !== 404) throw new Error(`robots.txt not readable (HTTP ${robotsRes.status}) – not collecting`)
+    const robots = robotsRes.body ?? ''
     const allowed = (url) => robotsAllows(robots, new URL(url).pathname + new URL(url).search)
     if (!allowed(cfg.sitemap)) throw new Error('robots.txt disallows the sitemap – not collecting')
 
     // 1. collect product URLs that contain one of our part numbers
     const keys = slugKeysFromIdentifiers(identifiers)
+    const index = buildIndex(identifiers)
+    const info = cfg.nameMatch ? loadCatalogInfo() : null
+    /** product name from a URL slug: "…/amd-ryzen-7-…-7800x3d-box-processzor-p378259.html" */
+    const slugText = (url) => {
+      try {
+        return decodeURIComponent(new URL(url).pathname).split('/').filter(Boolean).at(-1).replace(/\.html?$/, '').replace(/[-_]+/g, ' ')
+      } catch {
+        return ''
+      }
+    }
+    const byName = (text) =>
+      info ? (matchMpnInName(text, index, info.brandOf) ?? matchCpuModel(text, info.cpuIndex, info.cpuKeyOf)) : undefined
     /** @type {Map<string, {partId: string, key: string}>} */
     const candidates = new Map()
     const urlsPerKey = new Map()
@@ -76,13 +99,18 @@ export function createSitemapSource(cfg) {
       for (const url of locs) {
         if (!cfg.productUrl.test(url) || cfg.excludeUrl?.test(url)) continue
         productUrls++
-        const hit = matchUrl(url, keys)
+        let hit = matchUrl(url, keys)
+        if (!hit && info) {
+          const id = byName(slugText(url))
+          if (id) hit = { partId: id, key: `name:${id}` }
+        }
         if (!hit || !allowed(url)) continue
         candidates.set(url, hit)
         urlsPerKey.set(hit.key, (urlsPerKey.get(hit.key) ?? 0) + 1)
       }
     }
     for (const [url, hit] of candidates) if ((urlsPerKey.get(hit.key) ?? 0) > MAX_URLS_PER_KEY) candidates.delete(url)
+    const ordered = cfg.newestFirst ? [...candidates].sort(([a], [b]) => cfg.newestFirst(b) - cfg.newestFirst(a)) : [...candidates]
     if (productUrls === 0) throw new Error('no product URLs from the sitemaps – the site is not serving us')
     log(`${cfg.name}: ${sitemapsRead} sitemaps, ${productUrls} product URLs, ${candidates.size} look like our parts, ${Math.round((Date.now() - started) / 60000)} min`)
 
@@ -100,7 +128,7 @@ export function createSitemapSource(cfg) {
       const title = res.body?.match(/<title[^>]*>([^<]{0,80})/i)?.[1]?.trim()
       log(`${cfg.name}: ${why} – HTTP ${res.status}${res.error ? ` ${res.error}` : ''}, final URL ${res.url ?? '?'}, title "${title ?? ''}", ${res.body?.length ?? 0} bytes (${url})`)
     }
-    for (const [url, { partId }] of candidates) {
+    for (const [url, { partId }] of ordered) {
       if (fetched >= maxProductPages || timeLeft() <= 0) {
         log(`${cfg.name}: stopping early after ${fetched} pages (limit reached)`)
         break
@@ -125,7 +153,13 @@ export function createSitemapSource(cfg) {
         explain(url, res, page ? `price not in ${currency} (${page.currency})` : 'no product data')
         continue
       }
-      if (!pageConfirmsPart(identifiers, partId, page)) continue
+      if (!pageConfirmsPart(identifiers, partId, page)) {
+        if (!info) continue
+        // the page's own code pointing to another part is a clear no
+        const other = index.mpn.get(normalizeMpn(page.mpn)) || index.ean.get(normalizeEan(page.gtin))
+        if (other && other !== partId) continue
+        if (!page.name || byName(page.name) !== partId) continue
+      }
       // used / refurbished / outlet items would drag the median down
       if (!page.isNew || (cfg.excludeName && page.name && cfg.excludeName.test(page.name))) continue
       confirmed++

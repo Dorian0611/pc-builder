@@ -7,7 +7,7 @@ on:
     inputs:
       sources:
         description: 'Shops to run, as a JSON list'
-        default: '["manual","pcx","arukereso","megekko","overclockers"]'
+        default: '["manual","pcx","bestbyte","pcland","arukereso","megekko","overclockers"]'
       max_pages:
         description: 'Max product/listing pages per shop (empty = no limit) – for quick tests'
         default: ''
@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        source: ${{ fromJSON(inputs.sources || '["manual","pcx","arukereso","megekko","overclockers"]') }}
+        source: ${{ fromJSON(inputs.sources || '["manual","pcx","bestbyte","pcland","arukereso","megekko","overclockers"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -47,6 +47,8 @@ jobs:
           ARUKERESO_DISABLED: ${{ vars.ARUKERESO_DISABLED }}
           MEGEKKO_DISABLED: ${{ vars.MEGEKKO_DISABLED }}
           OVERCLOCKERS_DISABLED: ${{ vars.OVERCLOCKERS_DISABLED }}
+          BESTBYTE_DISABLED: ${{ vars.BESTBYTE_DISABLED }}
+          PCLAND_DISABLED: ${{ vars.PCLAND_DISABLED }}
           ARUKERESO_MAX_URLS: ${{ vars.ARUKERESO_MAX_URLS }}
           # Apify API token for the Árukereső/Árgép source (Settings → Secrets → Actions)
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
@@ -94,7 +96,7 @@ jobs:
           ls -l offers
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCES: ${{ inputs.sources || '["manual","pcx","arukereso","megekko","overclockers"]' }}
+          SOURCES: ${{ inputs.sources || '["manual","pcx","bestbyte","pcland","arukereso","megekko","overclockers"]' }}
 
       # Computed on top of the newest main; if someone pushed in the meantime,
       # start again from their commit instead of fighting a merge conflict.

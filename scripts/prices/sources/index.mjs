@@ -24,8 +24,11 @@
 import * as manual from './manual.mjs'
 import * as pcx from './pcx.mjs'
 import * as arukereso from './arukereso.mjs'
+// 2026-11 survey (probe-shops workflow): sitemap + product data readable, robots allows
+import * as bestbyte from './bestbyte.mjs'
+import * as pcland from './pcland.mjs'
 // foreign shops (same rule): their prices are converted to HUF and only feed the estimate
 import * as megekko from './megekko.mjs'
 import * as overclockers from './overclockers.mjs'
 
-export const SOURCES = { manual, pcx, arukereso, megekko, overclockers }
+export const SOURCES = { manual, pcx, bestbyte, pcland, arukereso, megekko, overclockers }

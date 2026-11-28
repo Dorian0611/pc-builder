@@ -101,6 +101,8 @@ export const SOURCE_LABELS: Record<string, string> = {
   arukereso: 'Árukereső',
   argep: 'Árgép',
   pcx: 'PCX',
+  bestbyte: 'BestByte',
+  pcland: 'PCLand',
   ipon: 'iPon',
   emag: 'eMAG',
 }

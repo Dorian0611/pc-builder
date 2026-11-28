@@ -64,3 +64,29 @@ describe('CPUs by model', () => {
     expect(matchCpuModel('Dell OptiPlex 7410 AIO 23,8FHD/i3-13100/16GB All-in-One asztali számítógép', idx, cpuNameKey)).toBeUndefined()
   })
 })
+
+describe('reading product pages', () => {
+  it('JSON-LD with spaces around "=" and an EAN in gtin8 (BestByte)', async () => {
+    const { parseProductJsonLd } = await import('../../scripts/prices/http.mjs')
+    const html = `<script type = "application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"AMD Ryzen 7 (7800X3D) box processzor","mpn":"100-100000910WOF","gtin8":"0730143314930","offers":[{"@type":"Offer","availability":"https://schema.org/InStock","price":"119999","priceCurrency":"HUF"}]}</script>`
+    expect(parseProductJsonLd(html)).toMatchObject({ mpn: '100-100000910WOF', gtin: '0730143314930', priceHuf: 119999, currency: 'HUF', inStock: true })
+  })
+  it('microdata: protocol-relative itemtype, breadcrumb names before it ignored (PCLand)', async () => {
+    const { parseProductJsonLd } = await import('../../scripts/prices/http.mjs')
+    const html = `<ol itemtype="https://schema.org/BreadcrumbList"><li><span itemprop="name">Főoldal</span></li></ol>
+      <div itemscope itemtype="//schema.org/Product"><h1><span class="x" itemprop="name">Gigabyte RTX 3060 GAMING OC 8G 2.0 videókártya</span></h1>
+      <meta itemprop="gtin13" content="4719331312909||2|0"/><div itemtype="//schema.org/Offer"><meta itemprop="price" content="162630"/>
+      <meta itemprop="pricecurrency" content="HUF"/><link itemprop="availability" href="http://schema.org/InStock"/></div></div>`
+    expect(parseProductJsonLd(html)).toMatchObject({
+      name: 'Gigabyte RTX 3060 GAMING OC 8G 2.0 videókártya',
+      gtin: '4719331312909',
+      priceHuf: 162630,
+      currency: 'HUF',
+      inStock: true,
+    })
+  })
+  it('no Product markup → null', async () => {
+    const { parseProductJsonLd } = await import('../../scripts/prices/http.mjs')
+    expect(parseProductJsonLd('<title>Kategória</title><span itemprop="price" content="1"/>')).toBeNull()
+  })
+})

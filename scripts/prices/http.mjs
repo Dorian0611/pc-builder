@@ -103,7 +103,8 @@ const IN_STOCK = /InStock|LimitedAvailability|InStoreOnly|OnlineOnly/i
 
 /** The schema.org Product in a page's JSON-LD: identifiers, price, currency, stock. */
 export function parseProductJsonLd(html) {
-  for (const m of html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+  // some shops write `type = "application/ld+json"` (spaces around =)
+  for (const m of html.matchAll(/<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
     let data
     try {
       data = JSON.parse(m[1].trim())
@@ -117,7 +118,8 @@ export function parseProductJsonLd(html) {
       const offer = [].concat(node.offers ?? [])[0]
       if (!offer) continue
       const price = Number(offer.price ?? offer.lowPrice)
-      const gtin = node.gtin13 ?? node.gtin ?? node.gtin14 ?? node.gtin12 ?? node.ean
+      // (some shops put a 13-digit EAN into gtin8)
+      const gtin = node.gtin13 ?? node.gtin ?? node.gtin14 ?? node.gtin12 ?? node.gtin8 ?? node.ean
       const condition = String(offer.itemCondition ?? node.itemCondition ?? '').replace(/^https?:\/\/schema\.org\//, '')
       return {
         /** "" when the page doesn't say; "UsedCondition" / "RefurbishedCondition" are not new products */
@@ -132,5 +134,44 @@ export function parseProductJsonLd(html) {
       }
     }
   }
-  return null
+  return parseProductMicrodata(html)
+}
+
+/** `itemprop="x" content="…"` (meta/link) or the element's text. */
+function itemprop(html, prop) {
+  const tag = html.match(new RegExp(`<[^>]*itemprop\\s*=\\s*["']${prop}["'][^>]*>`, 'i'))?.[0]
+  if (!tag) return undefined
+  const attr = tag.match(/\b(?:content|href)\s*=\s*["']([^"']*)["']/i)?.[1]
+  if (attr !== undefined) return attr.trim()
+  const after = html.slice(html.indexOf(tag) + tag.length)
+  return after.match(/^([^<]*)/)?.[1]?.trim() || undefined
+}
+
+/**
+ * schema.org Product as microdata (`itemtype=".../Product"`, `itemprop="price"`), for shops
+ * without JSON-LD. Same shape as parseProductJsonLd.
+ */
+export function parseProductMicrodata(page) {
+  // "https://schema.org/Product" or protocol-relative "//schema.org/Product"; the fields are
+  // read from there on, so breadcrumb names before it don't count
+  const at = page.search(/itemtype\s*=\s*["'](?:https?:)?\/\/schema\.org\/Product["']/i)
+  if (at < 0) return null
+  const html = page.slice(at)
+  const raw = itemprop(html, 'price')
+  if (raw === undefined) return null
+  const price = Number(String(raw).replace(/\s/g, '').replace(/,(\d{1,2})$/, '.$1').replace(/[^\d.]/g, ''))
+  const condition = String(itemprop(html, 'itemCondition') ?? '').replace(/^https?:\/\/schema\.org\//, '')
+  // first plausible barcode ("4719331312909||2|0" → "4719331312909")
+  const gtin = (itemprop(html, 'gtin13') ?? itemprop(html, 'gtin') ?? itemprop(html, 'gtin8'))?.match(/\d{8,14}/)?.[0]
+  const name = itemprop(html, 'name') ?? html.match(/<title>([^<]*)/i)?.[1]?.trim()
+  return {
+    condition,
+    isNew: !/Used|Refurbished|Damaged/i.test(condition),
+    name,
+    mpn: itemprop(html, 'mpn'),
+    gtin,
+    priceHuf: Number.isFinite(price) && price > 0 ? Math.round(price) : NaN,
+    currency: itemprop(html, 'priceCurrency'),
+    inStock: IN_STOCK.test(String(itemprop(html, 'availability') ?? '')),
+  }
 }

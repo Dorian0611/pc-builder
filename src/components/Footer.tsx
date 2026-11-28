@@ -16,8 +16,10 @@ export function Footer({ meta }: { meta: CatalogMeta }) {
       házaknál az alaplapméretből becsülve. Az átalakított adatok ugyanezen licenc alatt érhetők el.
       <p className="mt-2">
         Árak: a{' '}
-        <a className="underline" href="https://www.pcx.hu" target="_blank" rel="noreferrer">PCX</a> webáruház
-        készleten lévő termékeinek ára, havonta kétszer frissítve. A „becsült” árak tájékoztató értékek: vagy
+        <a className="underline" href="https://www.pcx.hu" target="_blank" rel="noreferrer">PCX</a>, a{' '}
+        <a className="underline" href="https://www.bestbyte.hu" target="_blank" rel="noreferrer">BestByte</a> és a{' '}
+        <a className="underline" href="https://pcland.hu" target="_blank" rel="noreferrer">PCLand</a> webáruház
+        készleten lévő termékeinek ára (több bolt esetén a középérték), havonta kétszer frissítve. A „becsült” árak tájékoztató értékek: vagy
         ugyanannak a terméknek külföldi (holland, brit) bolti árából – az EKB árfolyamán forintra váltva, magyar
         áfával, a magyar árszinthez igazítva –, vagy hasonló termékek magyar bolti áraiból. További ajánlatok: „Árak
         az Árukeresőn” link.
