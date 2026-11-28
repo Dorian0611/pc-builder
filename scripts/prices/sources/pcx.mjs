@@ -14,7 +14,8 @@
 
 import { buildIndex, normalizeMpn } from '../lib.mjs'
 import { get, robotsAllows, sleep } from '../http.mjs'
-import { matchProductUrl, slugKeysFromIdentifiers } from '../match.mjs'
+import { matchCpuModel, matchMpnInName, matchProductUrl, slugKeysFromIdentifiers } from '../match.mjs'
+import { loadCatalogInfo } from '../catalog-info.mjs'
 
 // re-exported for the tests
 export { robotsAllows, matchProductUrl, slugKeysFromIdentifiers }
@@ -71,13 +72,20 @@ export function mpnCandidates(productName) {
   return [...new Set(out.map((s) => s.trim()))].filter((s) => normalizeMpn(s).length >= 5 && /\d/.test(s))
 }
 
-/** Matches a listing item to an OpenDB part: part number in the name first, then the URL slug. */
-export function matchListingItem(item, index, slugKeys) {
+/**
+ * Matches a listing item to an OpenDB part: the part number at the end of the name or in
+ * parentheses, then the URL slug; with catalogue info also a part number anywhere in the
+ * name (brand checked) and, for CPUs, the model.
+ * @param {{ brandOf: (id: string) => string | undefined, cpuIndex: Map<string, string | null>, cpuKeyOf: (s: string) => string | undefined }} [info]
+ */
+export function matchListingItem(item, index, slugKeys, info) {
   for (const c of mpnCandidates(item.name)) {
     const id = index.mpn.get(normalizeMpn(c))
     if (id) return id
   }
-  return (item.url && matchProductUrl(item.url, slugKeys)?.partId) || undefined
+  const byUrl = (item.url && matchProductUrl(item.url, slugKeys)?.partId) || undefined
+  if (byUrl || !info) return byUrl
+  return matchMpnInName(item.name, index, info.brandOf) ?? matchCpuModel(item.name, info.cpuIndex, info.cpuKeyOf)
 }
 
 // ---------------------------------------------------------------- source
@@ -96,6 +104,7 @@ export async function fetchOffers({ identifiers, log = console.log, maxPages = M
 
   const index = buildIndex(identifiers)
   const slugKeys = slugKeysFromIdentifiers(identifiers)
+  const info = loadCatalogInfo()
 
   const offers = []
   let lastPage = 1
@@ -127,7 +136,7 @@ export async function fetchOffers({ identifiers, log = console.log, maxPages = M
     listed += parsed.items.length
     for (const item of parsed.items) {
       if (!(item.priceHuf > 0)) continue
-      const partId = matchListingItem(item, index, slugKeys)
+      const partId = matchListingItem(item, index, slugKeys, info)
       if (partId) offers.push({ source: name, shop: 'PCX', priceHuf: item.priceHuf, partId, url: item.url })
     }
   }

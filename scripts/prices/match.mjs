@@ -77,3 +77,99 @@ export function pageConfirmsPart(identifiers, partId, page) {
   if (ean && (ids.ean ?? []).some((e) => normalizeEan(e) === ean)) return true
   return false
 }
+
+// ---------------------------------------------------------------- part numbers inside names
+
+/** A part number counts on its own only if it is this long (normalized) … */
+const MIN_MPN_IN_NAME = 6
+/** … and one without digits only as a phrase of 3+ words at least this long ("OBSERVATORY HF GW"). */
+const MIN_WORDY_MPN = 10
+const MIN_WORDY_WORDS = 3
+const MAX_GRAM_WORDS = 7
+
+const squash = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '')
+/** Brands that shops often write differently. */
+const BRAND_ALIASES = {
+  westerndigital: ['wd'],
+  adata: ['xpg'],
+  xpg: ['adata'],
+  teamgroup: ['team', 'tforce'],
+  gskill: ['gskill', 'g.skill'],
+  fspgroup: ['fsp'],
+  coolermaster: ['coolermaster'],
+  hewlettpackard: ['hp'],
+}
+
+/** Does the shop's product name mention the part's brand? */
+export function nameHasBrand(name, brand) {
+  const n = squash(name)
+  const b = squash(brand)
+  if (!b) return true
+  if (n.includes(b)) return true
+  const first = squash(String(brand).split(/[\s-]+/)[0])
+  if (first.length >= 3 && n.includes(first)) return true
+  return (BRAND_ALIASES[b] ?? []).some((a) => n.includes(squash(a)))
+}
+
+/** Accessories and other things that carry a part's code but are not the part. */
+export const ACCESSORY =
+  /előlap|kiegészítő|\bmodul\b|kábel|adapter|tartó|rögzítő|keret|bővítő|hosszabbító|elosztó|router|extender|mesh networking|switch|webkamera|egér|billentyű|cable|bracket|front panel|riser/i
+
+/**
+ * Finds an OpenDB part number anywhere in a shop's product name, as a run of whole words:
+ * "MSI Videokártya … RTX 5060 8G VENTUS 2X OC V1" contains "RTX 5060 8G VENTUS 2X OC".
+ * The longest matching run wins ("B650M D3HP AX" over "B650M D3HP"); if that longest
+ * one belongs to several parts, there is no match – never a guess.
+ * The part's brand has to appear in the name too, and a "part number" that is just the
+ * brand (an OpenDB data slip: "Cooler Master") is ignored.
+ * @param {string} name
+ * @param {{ mpn: Map<string, string | null> }} index  buildIndex()
+ * @param {(id: string) => string | undefined} brandOf
+ * @returns {string | undefined} part id
+ */
+export function matchMpnInName(name, index, brandOf) {
+  if (ACCESSORY.test(name)) return undefined
+  const words = String(name).split(/[\s,;()[\]"]+/).filter(Boolean)
+  let best = { len: 0, id: /** @type {string | null | undefined} */ (undefined) }
+  for (let i = 0; i < words.length; i++) {
+    for (let n = 1; n <= MAX_GRAM_WORDS && i + n <= words.length; n++) {
+      const key = normalizeMpn(words.slice(i, i + n).join(' '))
+      if (key.length < MIN_MPN_IN_NAME || key.length <= best.len) continue
+      if (!/\d/.test(key) && (n < MIN_WORDY_WORDS || key.length < MIN_WORDY_MPN)) continue
+      const id = index.mpn.get(key)
+      if (id === undefined) continue
+      if (id !== null) {
+        const brand = brandOf(id)
+        if (brand && (normalizeMpn(brand) === key || !nameHasBrand(name, brand))) continue
+      }
+      best = { len: key.length, id } // null = ambiguous: kept, so a shorter run can't win
+    }
+  }
+  return best.id ?? undefined
+}
+
+/**
+ * CPUs by model ("Intel Core i3-13100 3,4GHz … OEM CM8071505092202" → "i3 13100"), for shops
+ * that list tray codes OpenDB doesn't have. Only models that map to exactly one part.
+ * @param {{ id: string, brand: string, name: string }[]} cpus  public/data/cpu.json
+ * @param {(name: string) => string | undefined} keyOf  perf.mjs cpuNameKey
+ */
+export function cpuModelIndex(cpus, keyOf) {
+  const map = new Map()
+  for (const c of cpus) {
+    const key = keyOf(`${c.brand} ${c.name}`)
+    if (!key) continue
+    map.set(key, map.has(key) && map.get(key) !== c.id ? null : c.id)
+  }
+  return map
+}
+
+/** Words that mark a CPU listing (and not, say, a CPU cooler or a board "for i5-…"). */
+const NOT_A_CPU =
+  /hűtő|cooler|alaplap|motherboard|keret|frame|paszta|paste|notebook|laptop|bracket|számítógép|all-in-one|optiplex|thinkcentre|prodesk|mini ?pc|szerver|server/i
+
+export function matchCpuModel(name, cpuIndex, keyOf) {
+  if (NOT_A_CPU.test(name)) return undefined
+  const key = keyOf(name)
+  return (key && cpuIndex.get(key)) || undefined
+}
